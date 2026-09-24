@@ -1,0 +1,19 @@
+# todo-cli 配置文件示例
+# 复制到:
+#   Linux/macOS: ~/.config/todo-cli/config.ini
+#   Windows:     %APPDATA%\todo-cli\config.ini
+
+# Python 解释器（单个可执行文件名或完整路径）
+#python = python3
+
+# 默认城市（留空则按 IP 自动定位）
+#default_city = 北京
+
+# 新闻 RSS/Atom 订阅源，逗号分隔
+#news_feeds = https://news.ycombinator.com/rss,http://feeds.bbci.co.uk/news/world/rss.xml
+
+# 自定义数据目录（存放 todo.db）
+#data_dir = /path/to/data
+
+# Python 脚本目录（通常无需设置，会自动探测）
+#script_dir = /path/to/python

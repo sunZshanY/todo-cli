@@ -1,0 +1,175 @@
+.TH TODO 1 "September 2026" "todo-cli 0.1.0" "User Commands"
+.SH NAME
+todo \- terminal todo list manager with weather and news
+.SH SYNOPSIS
+.B todo
+.I command
+.RI [ options ]
+.RI [ arguments ]
+.SH DESCRIPTION
+.B todo
+is a command line todo list manager.  Tasks are stored in a local SQLite
+database.  It also provides weather lookup (via wttr.in) and news reading
+(via configurable RSS/Atom feeds), implemented as Python helper scripts
+invoked through a pipe by the C core.
+.PP
+Supported platforms: Linux, macOS, and Windows.
+.SH COMMANDS
+.TP
+.BR add " \fItitle...\fR [\-p \fI1|2|3\fR] [\-d \fIYYYY\-MM\-DD\fR]"
+Add a task.  Priority is 1 (high), 2 (medium, default), or 3 (low).
+The due date must have the form YYYY\-MM\-DD.  Everything after a lone
+.B \-\-
+is treated as part of the title.
+.TP
+.BR list " | " ls " [\-a|\-\-all] [\-d|\-\-done] [\-t|\-\-todo]"
+List tasks.  By default only pending tasks are shown.  Use
+.B \-\-all
+to show everything or
+.B \-\-done
+to show completed tasks only.
+.TP
+.BI "done " id...
+Mark tasks as completed.
+.TP
+.BI "undo " id...
+Revert tasks to pending.
+.TP
+.BR del " | " rm " \fIid...\fR"
+Delete tasks.
+.TP
+.BI "edit " id " " new\-title...
+Change the title of a task.
+.TP
+.B clear
+Delete all completed tasks.
+.TP
+.B stats
+Print task counts: total, completed, and pending.
+.TP
+.BI "weather " [city]
+Show current weather.  Without a city the location is detected from the
+IP address; otherwise the configured default city is used.
+.TP
+.BI "news " [feed1,feed2,...]
+Show the latest headlines from RSS/Atom feeds.  Without arguments the
+configured feed list is used.
+.TP
+.B version
+Print version information.
+.TP
+.B help
+Print full help.
+.SH FILES
+.TP
+.I data_dir/todo.db
+SQLite database.  On Linux/macOS the default
+.I data_dir
+is
+.I $XDG_DATA_HOME/todo-cli
+(or
+.IR ~/.local/share/todo-cli );
+on Windows it is
+.IR %APPDATA%\\todo-cli .
+.TP
+.I config_dir/todo-cli/config.ini
+Optional configuration file, INI style with
+.I key = value
+lines and
+.B #
+or
+.B ;
+comments.  On Linux/macOS the default
+.I config_dir
+is
+.I $XDG_CONFIG_HOME
+(or
+.IR ~/.config );
+on Windows it is
+.IR %APPDATA% .
+See
+.B CONFIGURATION
+below.
+.SH CONFIGURATION
+.TP
+.B data_dir
+Directory where
+.I todo.db
+is stored.
+.TP
+.B python
+Python interpreter (a single executable name or path).
+Defaults to
+.B python3
+on Unix and
+.B python
+on Windows.
+.TP
+.B script_dir
+Directory containing
+.I weather.py
+and
+.IR news.py .
+Detected automatically; override only if needed.
+.TP
+.B default_city
+Default city for the weather command.  Empty means IP-based location.
+.TP
+.B news_feeds
+Comma-separated list of RSS/Atom feed URLs.
+.SH ENVIRONMENT
+.TP
+.B TODO_CLI_DATA_DIR
+Overrides
+.BR data_dir .
+.TP
+.B TODO_CLI_PYTHON
+Overrides
+.BR python .
+.TP
+.B TODO_CLI_SCRIPT_DIR
+Overrides
+.BR script_dir .
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime error (database, network, or script failure).
+.TP
+.B 2
+Usage error (unknown command or invalid arguments).
+.SH EXAMPLES
+.PP
+Add a high-priority task due on a specific date:
+.RS
+.nf
+todo add "Write weekly report" \-p 1 \-d 2026\-10\-01
+.fi
+.RE
+.PP
+List all tasks, complete tasks 1 and 3, then check the stats:
+.RS
+.nf
+todo list \-\-all
+todo done 1 3
+todo stats
+.fi
+.RE
+.PP
+Query the weather in Beijing and read the configured news feeds:
+.RS
+.nf
+todo weather Beijing
+todo news
+.fi
+.RE
+.SH SEE ALSO
+.BR sqlite3 (1),
+.BR python3 (1)
+.PP
+Full architecture documentation is provided with the distribution in
+.I docs/DESIGN.md
+and a sample configuration in
+.IR docs/config.ini.example .

@@ -1,0 +1,15 @@
+build/
+build-*/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+todo
+todo.exe
+__pycache__/
+*.pyc
+.cache/
+compile_commands.json
+Testing/
