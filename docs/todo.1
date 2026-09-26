@@ -35,7 +35,7 @@ Mark tasks as completed.
 .BI "undo " id...
 Revert tasks to pending.
 .TP
-.BR del " | " rm " \fIid...\fR"
+.BR delete " | " del " | " rm " \fIid...\fR"
 Delete tasks.
 .TP
 .BI "edit " id " " new\-title...
@@ -58,7 +58,7 @@ configured feed list is used.
 .B version
 Print version information.
 .TP
-.B help
+.BR \-\-help " | " \-h " | " help
 Print full help.
 .SH FILES
 .TP
@@ -141,6 +141,17 @@ Runtime error (database, network, or script failure).
 .B 2
 Usage error (unknown command or invalid arguments).
 .SH EXAMPLES
+.PP
+Add, list, complete and delete a task:
+.RS
+.nf
+todo add "Review linear equations"
+todo list
+todo done 1
+todo delete 1
+todo \-\-help
+.fi
+.RE
 .PP
 Add a high-priority task due on a specific date:
 .RS

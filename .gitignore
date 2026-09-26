@@ -6,10 +6,12 @@ cmake-build-*/
 *.a
 *.lib
 *.exe
-todo
-todo.exe
+/todo
+/todo.exe
 __pycache__/
 *.pyc
 .cache/
 compile_commands.json
 Testing/
+dist/
+*.deb

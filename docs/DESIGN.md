@@ -49,9 +49,8 @@
 | `ext.c/h` | 通过管道调用 Python 脚本并捕获输出 |
 | `util.c/h` | 字符串、目录、时间等工具函数 |
 
-对外公共 API 统一由伞头 `include/todo.h` 聚合，配合 CMake 生成的
-`include/todo/todo_version.h` 提供版本宏；安装时头文件落位
-`include/`（`<todo.h>`）与 `include/todo/`（`<todo/xxx.h>`）。
+内部 API 统一由伞头 `include/todo.h` 聚合，配合 CMake 生成的
+`todo/todo_version.h` 提供版本宏。CLI 运行包不安装开发头文件。
 
 ### 3.2 Python 模块（`python/`）
 
@@ -86,13 +85,13 @@ todo add  <标题...> [-p 1|2|3] [-d YYYY-MM-DD]   添加任务
 todo list | ls [-a|--all] [-d|--done] [-t|--todo] 列出任务（默认只显示待办）
 todo done  <ID...>                                标记完成
 todo undo  <ID...>                                取消完成
-todo del | rm <ID...>                             删除任务
+todo delete | del | rm <ID...>                    删除任务
 todo edit  <ID> <新标题...>                       修改标题
 todo clear                                        清除全部已完成任务
 todo stats                                        统计
 todo weather [城市]                               天气查询（缺省按 IP 定位）
 todo news   [订阅源1,订阅源2,...]                  新闻阅览（缺省用配置的订阅源）
-todo version | help                               版本 / 帮助
+todo --version | --help                           版本 / 帮助（兼容 version、help）
 ```
 
 退出码：`0` 成功，`1` 运行错误，`2` 用法错误。
@@ -141,10 +140,11 @@ todo version | help                               版本 / 帮助
 ## 8. 构建系统（CMake）
 
 - 标准 `CMakeLists.txt`，C11，无第三方构建依赖
-- SQLite 获取策略：优先 `find_package(SQLite3)`（Linux 系统库 / vcpkg）；未找到时 `FetchContent` 下载官方 amalgamation（3.53.4，SHA3-256 校验，静态编译）
+- SQLite 获取策略：Linux 默认要求系统库（Debian 安装 `libsqlite3-dev`）；其他平台优先系统库，未找到时 `FetchContent` 下载官方 amalgamation（3.53.4，SHA3-256 校验，静态编译）。`TODO_USE_SYSTEM_SQLITE=ON` 可禁止下载。
 - Windows 上 MinGW 与 MSVC 均可构建（MinGW 需 `-municode` 以支持 `wmain`）
-- 安装规则：`bin/todo`、`share/todo-cli/python/`（运行时可自动定位脚本）、`include/todo.h` + `include/todo/*.h`（公共 API）、`share/man/man1/todo.1`（man 页）
-- 测试：CTest + 无依赖断言测试（`tests/test_core.c`）
+- 安装规则：`bin/todo`、`share/todo-cli/python/`（运行时可自动定位脚本）、`share/man/man1/todo.1`（man 页）、`share/doc/todo-cli/`（文档与许可证）
+- Debian 打包：`sh scripts/build-deb.sh` 运行编译与测试，然后由 CPack 生成 `.deb`；系统动态库依赖由 `dpkg-shlibdeps` 探测，安装前缀为 `/usr`。
+- 测试：CTest + 核心断言测试（`tests/test_core.c`）+ 隔离数据目录中的 CLI 集成测试（`tests/test_cli.py`）
 
 ```bash
 cmake -S . -B build

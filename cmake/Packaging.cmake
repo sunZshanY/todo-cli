@@ -1,0 +1,21 @@
+# Build on the oldest Debian release that the package should support.
+# dpkg-shlibdeps records the actual libc/SQLite versions needed by the binary.
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "todo-cli")
+set(CPACK_PACKAGE_VENDOR "todo-cli contributors")
+set(CPACK_PACKAGE_CONTACT "todo-cli contributors" CACHE STRING "Debian package maintainer")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Terminal todo manager with local SQLite storage")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
+    "Manage tasks from the terminal: add, list, done and delete.\n Supports UTF-8 titles, priorities and due dates.\n Includes optional weather and RSS/Atom news commands.")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_RELEASE "1")
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "python3")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "ca-certificates")
+set(CPACK_STRIP_FILES ON)
+include(CPack)

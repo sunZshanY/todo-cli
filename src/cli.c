@@ -241,7 +241,7 @@ int todo_cli_parse(int argc, char **argv, TodoCliArgs *out)
 void todo_cli_usage(void)
 {
     fprintf(stderr, "用法: todo <命令> [选项] [参数]\n");
-    fprintf(stderr, "输入 todo help 查看完整帮助\n");
+    fprintf(stderr, "输入 todo --help 查看完整帮助\n");
 }
 
 void todo_cli_help(void)
@@ -259,19 +259,21 @@ void todo_cli_help(void)
         "        列出任务，默认只显示待办\n"
         "  done <ID...>          标记任务为已完成\n"
         "  undo <ID...>          取消任务完成状态\n"
-        "  del | rm <ID...>      删除任务\n"
+        "  delete <ID...>        删除任务（别名 del、rm）\n"
         "  edit <ID> <新标题...>  修改任务标题\n"
         "  clear                 清除全部已完成任务\n"
         "  stats                 任务统计\n"
         "  weather [城市]        查询天气，缺省城市按 IP 自动定位\n"
         "  news [订阅源...]       阅读新闻，逗号分隔 RSS/Atom 订阅源\n"
         "  version               显示版本信息\n"
-        "  help                  显示本帮助\n"
+        "  --help | -h | help    显示本帮助\n"
         "\n"
         "示例:\n"
-        "  todo add 写周报 -p 1 -d 2026-10-01\n"
-        "  todo list --all\n"
-        "  todo done 1 3\n"
+        "  todo add \"复习一元一次方程\"\n"
+        "  todo list\n"
+        "  todo done 1\n"
+        "  todo delete 1\n"
+        "  todo --help\n"
         "  todo weather 北京\n"
         "  todo news\n");
 }

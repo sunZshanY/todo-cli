@@ -1,6 +1,7 @@
 #include <todo/util.h>
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +11,6 @@
 #include <io.h>
 #include <windows.h>
 #else
-#include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #ifdef __APPLE__
@@ -51,8 +51,9 @@ int todo_str_to_long(const char *s, long *out)
     long v;
     if (s == NULL || *s == '\0')
         return -1;
+    errno = 0;
     v = strtol(s, &end, 10);
-    if (end == NULL || *end != '\0')
+    if (errno == ERANGE || end == s || *end != '\0')
         return -1;
     *out = v;
     return 0;
