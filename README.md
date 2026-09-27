@@ -3,6 +3,8 @@
 面向 GNU/Linux（Debian）的终端待办工具。C 主程序使用 SQLite 保存任务，支持中文标题；依赖均可通过 apt 安装，无需 pip 或 npm。
 > 跟todo-cli v0.1相比，增加了许多特性 ......
 
+内容问题：<a href="error_project/ERROR_2026_9_27.md">todo问题反馈</a>
+
 ## 特性
 
 - 自定义项目，支持中文名称（NanoX、TODO_CLI、Python学习、蓝桥杯等）
