@@ -75,7 +75,8 @@ static void test_priority(void)
     CHECK(todo_is_valid_priority(1));
     CHECK(todo_is_valid_priority(2));
     CHECK(todo_is_valid_priority(3));
-    CHECK(!todo_is_valid_priority(0));
+    CHECK(todo_is_valid_priority(0));
+    CHECK(!todo_is_valid_priority(-1));
     CHECK(!todo_is_valid_priority(4));
 }
 

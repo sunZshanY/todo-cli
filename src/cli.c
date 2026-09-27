@@ -35,6 +35,8 @@ static char *join_parts(const char *const *parts, int count, const char *sep)
 
 static TodoCommand match_command(const char *s)
 {
+    if (strcmp(s, "project") == 0)
+        return CMD_PROJECT;
     if (strcmp(s, "add") == 0 || strcmp(s, "a") == 0)
         return CMD_ADD;
     if (strcmp(s, "list") == 0 || strcmp(s, "ls") == 0)
@@ -62,10 +64,58 @@ static TodoCommand match_command(const char *s)
     return CMD_NONE;
 }
 
+static int parse_priority(const char *s, long *out)
+{
+    if (s[0] == 'P' || s[0] == 'p')
+        s++;
+    if (strlen(s) != 1 || s[0] < '0' || s[0] > '3') {
+        fprintf(stderr, "无效的优先级，应为 P0/P1/P2/P3（也支持数字 0/1/2/3）\n");
+        return -1;
+    }
+    *out = s[0] - '0';
+    return 0;
+}
+
+static int set_project(TodoCliArgs *out, const char *name)
+{
+    char *copy, *trimmed;
+    if (out->project != NULL) {
+        fprintf(stderr, "项目只能指定一次\n");
+        return -1;
+    }
+    copy = todo_strdup(name);
+    if (copy == NULL)
+        return -1;
+    trimmed = todo_str_trim(copy);
+    if (*trimmed == '\0') {
+        fprintf(stderr, "项目名称不能为空\n");
+        free(copy);
+        return -1;
+    }
+    out->project = todo_strdup(trimmed);
+    free(copy);
+    return out->project != NULL ? 0 : -1;
+}
+
+static int parse_project(int argc, char **argv, TodoCliArgs *out)
+{
+    if (argc == 0 || (argc == 1 &&
+        (strcmp(argv[0], "list") == 0 || strcmp(argv[0], "ls") == 0))) {
+        out->project_cmd = PROJECT_LIST;
+        return 0;
+    }
+    if (argc == 2 && (strcmp(argv[0], "add") == 0 || strcmp(argv[0], "show") == 0)) {
+        out->project_cmd = strcmp(argv[0], "add") == 0 ? PROJECT_ADD : PROJECT_SHOW;
+        return set_project(out, argv[1]);
+    }
+    fprintf(stderr, "用法: todo project add <项目> | list | show <项目>\n");
+    return -1;
+}
+
 static int parse_add(int argc, char **argv, TodoCliArgs *out)
 {
     int i;
-    int title_count = 0;
+    int title_count = 0, title_start = 0, literal_title = 0, priority_set = 0;
     const char **parts;
     long v;
 
@@ -77,22 +127,23 @@ static int parse_add(int argc, char **argv, TodoCliArgs *out)
     for (i = 0; i < argc; i++) {
         const char *arg = argv[i];
         if (strcmp(arg, "--") == 0) {
+            literal_title = title_count == 0;
             for (i++; i < argc; i++)
                 parts[title_count++] = argv[i];
             break;
         }
         if (strcmp(arg, "-p") == 0 || strcmp(arg, "--priority") == 0) {
-            if (i + 1 >= argc || todo_str_to_long(argv[++i], &v) != 0 ||
-                !todo_is_valid_priority(v)) {
-                fprintf(stderr, "无效的优先级，应为 1(高) 2(中) 3(低)\n");
+            if (priority_set || i + 1 >= argc || parse_priority(argv[++i], &v) != 0) {
+                fprintf(stderr, "--priority 需要一个 P0/P1/P2/P3 值，且只能指定一次\n");
                 free(parts);
                 return -1;
             }
             out->priority = v;
+            priority_set = 1;
             continue;
         }
         if (strcmp(arg, "-d") == 0 || strcmp(arg, "--due") == 0) {
-            if (i + 1 >= argc || !todo_is_valid_date(argv[++i])) {
+            if (out->due != NULL || i + 1 >= argc || !todo_is_valid_date(argv[++i])) {
                 fprintf(stderr, "无效的截止日期，格式应为 YYYY-MM-DD\n");
                 free(parts);
                 return -1;
@@ -104,9 +155,33 @@ static int parse_add(int argc, char **argv, TodoCliArgs *out)
             }
             continue;
         }
+        if (strcmp(arg, "--project") == 0) {
+            if (i + 1 >= argc || set_project(out, argv[++i]) != 0) {
+                fprintf(stderr, "--project 需要一个项目名称\n");
+                free(parts);
+                return -1;
+            }
+            continue;
+        }
+        if (arg[0] == '-') {
+            fprintf(stderr, "未知选项: %s（以 - 开头的标题请放在 -- 后）\n", arg);
+            free(parts);
+            return -1;
+        }
         parts[title_count++] = arg;
     }
-    out->title = join_parts(parts, title_count, " ");
+    if (out->project == NULL && title_count >= 2 && !literal_title) {
+        if (set_project(out, parts[0]) != 0) {
+            free(parts);
+            return -1;
+        }
+        title_start = 1;
+    }
+    if (out->project == NULL && set_project(out, "TODO") != 0) {
+        free(parts);
+        return -1;
+    }
+    out->title = join_parts(parts + title_start, title_count - title_start, " ");
     free(parts);
     if (out->title == NULL || *todo_str_trim(out->title) == '\0') {
         fprintf(stderr, "缺少任务标题\n");
@@ -139,19 +214,46 @@ static int parse_ids(int argc, char **argv, TodoCliArgs *out)
 
 static int parse_list(int argc, char **argv, TodoCliArgs *out)
 {
-    int i;
+    int i, status_set = 0;
 
     out->list_filter = TODO_LIST_PENDING;
     for (i = 0; i < argc; i++) {
+        int filter = -1;
         if (strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "--all") == 0)
-            out->list_filter = TODO_LIST_ALL;
+            filter = TODO_LIST_ALL;
         else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--done") == 0)
-            out->list_filter = TODO_LIST_DONE;
-        else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--todo") == 0)
-            out->list_filter = TODO_LIST_PENDING;
+            filter = TODO_LIST_DONE;
+        else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--todo") == 0 ||
+                 strcmp(argv[i], "--pending") == 0)
+            filter = TODO_LIST_PENDING;
+        else if (strcmp(argv[i], "--project") == 0) {
+            if (i + 1 >= argc || set_project(out, argv[++i]) != 0) {
+                fprintf(stderr, "--project 需要一个项目名称\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--priority") == 0) {
+            if (out->priority != -1 || i + 1 >= argc ||
+                parse_priority(argv[++i], &out->priority) != 0) {
+                fprintf(stderr, "--priority 需要一个 P0/P1/P2/P3 值，且只能指定一次\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--") == 0 && i + 2 == argc) {
+            return set_project(out, argv[i + 1]);
+        } else if (argv[i][0] != '-') {
+            if (set_project(out, argv[i]) != 0)
+                return -1;
+        }
         else {
             fprintf(stderr, "未知选项: %s\n", argv[i]);
             return -1;
+        }
+        if (filter != -1) {
+            if (status_set && filter != out->list_filter) {
+                fprintf(stderr, "--all、--done 和 --todo 不能同时使用\n");
+                return -1;
+            }
+            out->list_filter = filter;
+            status_set = 1;
         }
     }
     return 0;
@@ -184,8 +286,10 @@ static int parse_edit(int argc, char **argv, TodoCliArgs *out)
 
 int todo_cli_parse(int argc, char **argv, TodoCliArgs *out)
 {
+    int i;
     memset(out, 0, sizeof(*out));
     out->cmd = CMD_NONE;
+    out->priority = -1;
 
     if (argc < 2) {
         todo_cli_usage();
@@ -198,7 +302,15 @@ int todo_cli_parse(int argc, char **argv, TodoCliArgs *out)
         return -1;
     }
 
+    for (i = 2; i < argc && strcmp(argv[i], "--") != 0; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            out->cmd = CMD_HELP;
+            return 0;
+        }
+    }
     switch (out->cmd) {
+    case CMD_PROJECT:
+        return parse_project(argc - 2, argv + 2, out);
     case CMD_ADD:
         return parse_add(argc - 2, argv + 2, out);
     case CMD_LIST:
@@ -253,10 +365,16 @@ void todo_cli_help(void)
         "  todo <命令> [选项] [参数]\n"
         "\n"
         "命令:\n"
-        "  add <标题...> [-p 1|2|3] [-d YYYY-MM-DD]\n"
-        "        添加任务，优先级 1 高 / 2 中(默认) / 3 低\n"
-        "  list | ls [-a|--all] [-d|--done] [-t|--todo]\n"
-        "        列出任务，默认只显示待办\n"
+        "  project add <项目>     创建自定义项目，支持中文和空格\n"
+        "  project list           列出项目及完成进度（也可直接 todo project）\n"
+        "  project show <项目>    按 P0/P1/P2/P3、Completed 展示任务及 Progress\n"
+        "  add <项目> <标题...> [-p P0|P1|P2|P3] [-d YYYY-MM-DD]\n"
+        "        添加项目任务；P0 最高，P3 最低，默认 P2；支持 --priority\n"
+        "  add <标题> [--project <项目>] [--priority P0|P1|P2|P3]\n"
+        "        单个标题参数默认归入 TODO 项目；含空格的标题请加引号\n"
+        "  list | ls [项目] [--project <项目>] [-p|--priority P0|P1|P2|P3]\n"
+        "        [-a|--all] [-d|--done] [-t|--todo|--pending]\n"
+        "        默认显示所有项目的待办，可组合项目、优先级和状态筛选\n"
         "  done <ID...>          标记任务为已完成\n"
         "  undo <ID...>          取消任务完成状态\n"
         "  delete <ID...>        删除任务（别名 del、rm）\n"
@@ -269,11 +387,21 @@ void todo_cli_help(void)
         "  --help | -h | help    显示本帮助\n"
         "\n"
         "示例:\n"
+        "  todo project add NanoX\n"
+        "  todo project add Python学习\n"
+        "  todo add NanoX \"修复崩溃\" --priority P0\n"
+        "  todo project show NanoX\n"
+        "  todo list NanoX --priority P0 --todo\n"
         "  todo add \"复习一元一次方程\"\n"
         "  todo list\n"
         "  todo done 1\n"
         "  todo delete 1\n"
         "  todo --help\n"
         "  todo weather 北京\n"
-        "  todo news\n");
+        "  todo news\n"
+        "\n"
+        "任务 ID 在所有项目中唯一；done/delete 使用输出中的 ID。\n"
+        "旧数据库自动升级，任务归入 TODO，ID 与完成状态保持不变。\n"
+        "数据库默认位于 ~/.local/share/todo-cli/todo.db（Linux），\n"
+        "可用 TODO_CLI_DATA_DIR 覆盖；支持数字优先级 0/1/2/3。\n");
 }

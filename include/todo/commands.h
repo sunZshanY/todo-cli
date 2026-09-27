@@ -7,6 +7,7 @@
 #include "config.h"
 
 int cmd_add(sqlite3 *db, const TodoCliArgs *args);
+int cmd_project(sqlite3 *db, const TodoCliArgs *args);
 int cmd_list(sqlite3 *db, const TodoCliArgs *args);
 int cmd_done(sqlite3 *db, const TodoCliArgs *args, int done);
 int cmd_delete(sqlite3 *db, const TodoCliArgs *args);

@@ -13,6 +13,7 @@
 static void cleanup_cli_args(TodoCliArgs *args)
 {
     free(args->title);
+    free(args->project);
     free(args->due);
     free(args->city);
     free(args->feeds);
@@ -79,6 +80,9 @@ static int todo_main(int argc, char **argv)
     }
 
     switch (args.cmd) {
+    case CMD_PROJECT:
+        rc = cmd_project(db, &args);
+        break;
     case CMD_ADD:
         rc = cmd_add(db, &args);
         break;

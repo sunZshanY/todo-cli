@@ -7,7 +7,7 @@ set(CPACK_PACKAGE_CONTACT "todo-cli contributors" CACHE STRING "Debian package m
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Terminal todo manager with local SQLite storage")
 set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
-    "Manage tasks from the terminal: add, list, done and delete.\n Supports UTF-8 titles, priorities and due dates.\n Includes optional weather and RSS/Atom news commands.")
+    "Manage projects and tasks from the terminal.\n Supports UTF-8 project names, P0-P3 priorities, progress views and filters.\n Stores tasks in SQLite with automatic migration from version 0.1.\n Includes optional weather and RSS/Atom news commands.")
 set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)

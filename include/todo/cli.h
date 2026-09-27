@@ -14,8 +14,15 @@ typedef enum {
     CMD_WEATHER,
     CMD_NEWS,
     CMD_HELP,
-    CMD_VERSION
+    CMD_VERSION,
+    CMD_PROJECT
 } TodoCommand;
+
+typedef enum {
+    PROJECT_ADD,
+    PROJECT_LIST,
+    PROJECT_SHOW
+} TodoProjectCommand;
 
 enum {
     TODO_LIST_PENDING = 0,
@@ -25,6 +32,8 @@ enum {
 
 typedef struct {
     TodoCommand cmd;
+    TodoProjectCommand project_cmd;
+    char *project;
     char *title;
     long priority;
     char *due;

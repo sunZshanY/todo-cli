@@ -43,8 +43,8 @@
 | `main.c` | 入口；加载配置、打开数据库、分发命令 |
 | `cli.c/h` | 子命令与参数解析、帮助文本 |
 | `commands.c/h` | 各子命令的业务实现与输出 |
-| `todo.c/h` | 任务领域模型，封装 SQL 操作 |
-| `db.c/h` | SQLite 打开/关闭/建表 |
+| `todo.c/h` | 项目与任务模型、组合筛选、项目统计，封装参数化 SQL |
+| `db.c/h` | SQLite 打开/关闭、版本检查、事务化迁移 |
 | `config.c/h` | 配置读取、跨平台路径解析 |
 | `ext.c/h` | 通过管道调用 Python 脚本并捕获输出 |
 | `util.c/h` | 字符串、目录、时间等工具函数 |
@@ -66,23 +66,41 @@
 SQLite 表结构（`todo.db`）：
 
 ```sql
+CREATE TABLE projects (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+  created_at   INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS todos (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   title        TEXT    NOT NULL,
-  priority     INTEGER NOT NULL DEFAULT 2,   -- 1 高 / 2 中 / 3 低
+  priority     INTEGER NOT NULL DEFAULT 2,   -- P0/P1/P2/P3，默认 P2
   done         INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL,             -- Unix 时间戳
   completed_at INTEGER,                      -- 完成时间戳，未完成时 NULL
-  due          TEXT                           -- 截止日期 YYYY-MM-DD，可空
+  due          TEXT,                          -- 截止日期 YYYY-MM-DD，可空
+  project_id   INTEGER REFERENCES projects(id)
 );
 CREATE INDEX IF NOT EXISTS idx_todos_done ON todos(done);
+CREATE INDEX idx_todos_project ON todos(project_id, done, priority);
+PRAGMA user_version = 2;
 ```
+
+默认项目为 `TODO`（id=1）。项目名区分大小写且唯一，CLI 去除名称两端空白并拒绝空名称；任务 ID 跨项目唯一。任务只能添加到已存在的项目，创建项目与添加任务均采用参数化 SQL。
+
+v0.1 数据库未设置 `user_version`，其值为 0。首次运行 v0.2 时开启外键检查，在 `BEGIN IMMEDIATE` 事务内读取版本、创建项目表、通过 `ALTER TABLE` 加入项目关联，再把旧任务归入 TODO。保留所有任务字段和 `sqlite_sequence`，包括已删除任务占用过的 ID；成功后版本设为 2，失败则整体回滚。版本高于 2 时拒绝修改。为兼容 SQLite 的 ALTER 限制，迁移列可空，但 v0.2 写入路径始终要求有效项目。
 
 ## 5. CLI 命令设计
 
 ```
-todo add  <标题...> [-p 1|2|3] [-d YYYY-MM-DD]   添加任务
-todo list | ls [-a|--all] [-d|--done] [-t|--todo] 列出任务（默认只显示待办）
+todo project add <项目>                          创建项目
+todo project [list]                              列出项目及 Todo/Done/Progress
+todo project show <项目>                         按 P0-P3、Completed 展示，输出进度
+todo add <项目> <标题...> [-p P0|P1|P2|P3] [-d YYYY-MM-DD]
+todo add <标题> [--project <项目>]                单标题默认归入 TODO
+todo list | ls [项目] [--project <项目>] [-p|--priority P0|P1|P2|P3]
+             [-a|--all] [-d|--done] [-t|--todo|--pending]
 todo done  <ID...>                                标记完成
 todo undo  <ID...>                                取消完成
 todo delete | del | rm <ID...>                    删除任务
@@ -95,6 +113,8 @@ todo --version | --help                           版本 / 帮助（兼容 versi
 ```
 
 退出码：`0` 成功，`1` 运行错误，`2` 用法错误。
+
+`list` 默认查询所有项目待办，项目、优先级、状态可以组合筛选。待办按优先级、截止日期（空日期最后）、ID 排序；Completed 按完成时间和 ID 倒序。看板固定显示 P0/P1/P2/P3 与 Completed，任务旁显示 ID，进度为完成数/总数；空项目为 0/0。列表用分隔符呈现，避免中文宽度造成表格对齐问题。所有子命令支持 `--help`；帮助和版本查询不会创建数据库。
 
 ## 6. 配置系统
 
@@ -159,13 +179,13 @@ ctest --test-dir build
 
 ## 10. 路线图
 
-- v0.1（当前设计）：基础增删改查、SQLite 存储、天气/新闻、跨平台构建
-- v0.2：任务优先级/截止日期排序与高亮、ANSI 颜色
+- v0.1（已完成）：基础增删改查、SQLite 存储、天气/新闻、跨平台构建
+- v0.2（已完成）：自定义项目、P0-P3、项目看板及进度、list 组合筛选、旧库迁移、Debian 包
 - v0.3：标签、搜索、JSON 导入导出
 - v0.4：同步/提醒（可选）
 
 ## 11. 已知限制
 
-- `list` 输出按字符宽度对齐，CJK 宽字符可能引起轻微错位（v0.2 修复）
+- 项目管理提供创建、列表和查看，暂不提供重命名、删除或跨项目移动任务
 - 配置 `python` 仅支持单个可执行路径，不支持带参数
-- 未做数据库并发访问锁（单用户 CLI 场景）
+- 并发写入使用 SQLite 事务锁及 2 秒 busy timeout；超时返回错误

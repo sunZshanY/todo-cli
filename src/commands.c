@@ -12,12 +12,14 @@
 static const char *priority_name(int p)
 {
     switch (p) {
+    case 0:
+        return "P0";
     case 1:
-        return "高";
+        return "P1";
     case 3:
-        return "低";
+        return "P3";
     default:
-        return "中";
+        return "P2";
     }
 }
 
@@ -25,9 +27,10 @@ int cmd_add(sqlite3 *db, const TodoCliArgs *args)
 {
     long id = 0;
 
-    if (todo_add(db, args->title, (int)args->priority, args->due, &id) != 0)
+    if (todo_add_to_project(db, args->project, args->title,
+                            (int)args->priority, args->due, &id) != 0)
         return 1;
-    printf("已添加任务 #%ld: %s (优先级 %s)\n", id, args->title,
+    printf("已添加任务 #%ld [%s]: %s (优先级 %s)\n", id, args->project, args->title,
            priority_name((int)args->priority));
     return 0;
 }
@@ -37,25 +40,101 @@ int cmd_list(sqlite3 *db, const TodoCliArgs *args)
     Todo **list = NULL;
     int count = 0, i, rc;
 
-    if (todo_list(db, args->list_filter, &list, &count) != 0)
+    if (args->project != NULL) {
+        int exists = todo_project_exists(db, args->project);
+        if (exists < 0)
+            return 1;
+        if (!exists) {
+            fprintf(stderr, "项目不存在: %s\n", args->project);
+            return 1;
+        }
+    }
+    if (todo_list_filtered(db, args->project, args->list_filter,
+                           (int)args->priority, &list, &count) != 0)
         return 1;
     if (count == 0) {
         printf("没有任务\n");
         return 0;
     }
-    printf("%-3s %-5s %-12s %-4s %s\n", "状态", "优先级", "截止日期", "ID", "标题");
-    printf("%-3s %-5s %-12s %-4s %s\n", "----", "------", "----------", "--", "----");
+    printf("状态 | 优先级 | ID | 项目 | 标题 | 截止日期\n");
     for (i = 0; i < count; i++) {
         Todo *t = list[i];
-        printf("%-3s %-5s %-12s %-4ld %s\n",
+        printf("%s | %s | #%ld | %s | %s | %s\n",
                t->done ? "[x]" : "[ ]",
                priority_name(t->priority),
-               t->due != NULL ? t->due : "-",
-               t->id, t->title);
+               t->id, t->project, t->title,
+               t->due != NULL ? t->due : "-");
     }
     rc = 0;
     todo_free_list(list, count);
     return rc;
+}
+
+int cmd_project(sqlite3 *db, const TodoCliArgs *args)
+{
+    int exists, i, p;
+    if (args->project_cmd == PROJECT_LIST) {
+        TodoProject *projects = NULL;
+        int count = 0;
+        if (todo_project_list(db, &projects, &count) != 0)
+            return 1;
+        printf("Project | Todo | Done | Progress\n");
+        for (i = 0; i < count; i++) {
+            TodoProject *project = &projects[i];
+            printf("%s | %d | %d | %d/%d\n", project->name,
+                   project->total - project->done, project->done,
+                   project->done, project->total);
+        }
+        todo_free_projects(projects, count);
+        return 0;
+    }
+    exists = todo_project_exists(db, args->project);
+    if (exists < 0)
+        return 1;
+    if (args->project_cmd == PROJECT_ADD) {
+        if (exists) {
+            fprintf(stderr, "项目已存在: %s\n", args->project);
+            return 1;
+        }
+        if (todo_project_add(db, args->project) != 0)
+            return 1;
+        printf("已创建项目: %s\n", args->project);
+        return 0;
+    }
+    if (!exists) {
+        fprintf(stderr, "项目不存在: %s\n", args->project);
+        return 1;
+    }
+    {
+        Todo **list = NULL;
+        int count = 0, done = 0;
+        if (todo_list_filtered(db, args->project, TODO_FILTER_ALL, -1,
+                               &list, &count) != 0)
+            return 1;
+        printf("%s\n────────────────────────────\n", args->project);
+        for (p = 0; p <= 3; p++) {
+            printf("\nP%d\n", p);
+            for (i = 0; i < count; i++) {
+                Todo *t = list[i];
+                if (!t->done && t->priority == p) {
+                    printf("  [ ] %s (#%ld)", t->title, t->id);
+                    if (t->due != NULL)
+                        printf("  due: %s", t->due);
+                    putchar('\n');
+                }
+            }
+        }
+        printf("\nCompleted\n");
+        for (i = 0; i < count; i++) {
+            if (list[i]->done) {
+                printf("  [x] %s (#%ld)\n", list[i]->title, list[i]->id);
+                done++;
+            }
+        }
+        printf("\nProgress: %d/%d\n", done, count);
+        todo_free_list(list, count);
+    }
+    return 0;
 }
 
 int cmd_done(sqlite3 *db, const TodoCliArgs *args, int done)

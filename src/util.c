@@ -149,7 +149,7 @@ int todo_is_valid_date(const char *s)
 
 int todo_is_valid_priority(long p)
 {
-    return p >= 1 && p <= 3;
+    return p >= 0 && p <= 3;
 }
 
 int todo_exe_dir(char *buf, size_t cap)

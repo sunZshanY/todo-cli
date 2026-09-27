@@ -1,4 +1,4 @@
-.TH TODO 1 "September 2026" "todo-cli 0.1.0" "User Commands"
+.TH TODO 1 "September 2026" "todo-cli 0.2.0" "User Commands"
 .SH NAME
 todo \- terminal todo list manager with weather and news
 .SH SYNOPSIS
@@ -16,21 +16,45 @@ invoked through a pipe by the C core.
 Supported platforms: Linux, macOS, and Windows.
 .SH COMMANDS
 .TP
-.BR add " \fItitle...\fR [\-p \fI1|2|3\fR] [\-d \fIYYYY\-MM\-DD\fR]"
-Add a task.  Priority is 1 (high), 2 (medium, default), or 3 (low).
-The due date must have the form YYYY\-MM\-DD.  Everything after a lone
-.B \-\-
-is treated as part of the title.
+.BI "project add " name
+Create a project. Names are case-sensitive and may contain UTF-8 text.
+Quote names containing spaces. Duplicate or empty names are rejected.
 .TP
-.BR list " | " ls " [\-a|\-\-all] [\-d|\-\-done] [\-t|\-\-todo]"
-List tasks.  By default only pending tasks are shown.  Use
+.B project [list]
+List projects with pending, completed and total task counts.
+.TP
+.BI "project show " name
+Show pending tasks grouped under P0, P1, P2 and P3, followed by Completed
+and Progress: completed/total. Task IDs are shown next to titles.
+.TP
+.BR add " \fIproject title...\fR [\-p \fIP0|P1|P2|P3\fR] [\-d \fIYYYY\-MM\-DD\fR]"
+Add a task to an existing project. Priority is P0 (highest) through P3
+(lowest), default P2. The long option is
+.BR \-\-priority .
+Numeric values 0/1/2/3 are also accepted.
+With only one title argument, the default project is TODO.
+Use an explicit
+.BI \-\-project " name"
+to treat all positional arguments as title words.
+The due date must have the form YYYY\-MM\-DD. Everything after a lone
+.B \-\-
+is treated literally; if it precedes all title words, the default project is TODO.
+.TP
+.BR list " | " ls " [project] [\-\-project name] [\-p|\-\-priority P0|P1|P2|P3]"
+List tasks. Project, priority and status filters can be combined.
+By default only pending tasks across all projects are shown. Use
 .B \-\-all
 to show everything or
 .B \-\-done
-to show completed tasks only.
+to show completed tasks only. These status flags are mutually exclusive
+with each other and with
+.BR \-\-todo .
+.B \-\-pending
+is an alias for
+.BR \-\-todo .
 .TP
 .BI "done " id...
-Mark tasks as completed.
+Mark tasks as completed. IDs are unique across all projects.
 .TP
 .BI "undo " id...
 Revert tasks to pending.
@@ -60,6 +84,17 @@ Print version information.
 .TP
 .BR \-\-help " | " \-h " | " help
 Print full help.
+.PP
+All subcommands also accept
+.BR \-\-help .
+Help and version queries do not open the database.
+.SH UPGRADING
+Version 0.1 databases are migrated automatically in a transaction.
+Existing tasks are assigned to the TODO project; IDs, timestamps,
+completion status and due dates are preserved. Old numeric priorities
+1/2/3 become P1/P2/P3. Failed migrations are rolled back.
+Databases with a newer schema version are rejected without modification.
+Use version 0.2 or later after migration.
 .SH FILES
 .TP
 .I data_dir/todo.db
@@ -141,6 +176,17 @@ Runtime error (database, network, or script failure).
 .B 2
 Usage error (unknown command or invalid arguments).
 .SH EXAMPLES
+.PP
+Create a project, add a P0 task and display its progress:
+.RS
+.nf
+todo project add NanoX
+todo add NanoX "Fix crash" \-\-priority P0
+todo project show NanoX
+todo list NanoX \-\-priority P0 \-\-todo
+todo project list
+.fi
+.RE
 .PP
 Add, list, complete and delete a task:
 .RS
