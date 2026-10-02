@@ -15,7 +15,11 @@ typedef enum {
     CMD_NEWS,
     CMD_HELP,
     CMD_VERSION,
-    CMD_PROJECT
+    CMD_PROJECT,
+    CMD_TRASH,
+    CMD_RESTORE,
+    CMD_PURGE,
+    CMD_CAL
 } TodoCommand;
 
 typedef enum {
@@ -42,6 +46,10 @@ typedef struct {
     char *feeds;
     long *ids;
     int id_count;
+    int purge_all;
+    int cal_set;
+    int cal_year;
+    int cal_month;
 } TodoCliArgs;
 
 int todo_cli_parse(int argc, char **argv, TodoCliArgs *out);

@@ -1,5 +1,6 @@
 """Exercise the public CLI in separate processes with isolated, persistent data."""
 
+import datetime
 import os
 import sqlite3
 from contextlib import closing
@@ -58,17 +59,20 @@ class TodoCliTest(unittest.TestCase):
 
     def test_help_does_not_create_database(self):
         help_text = self.run_todo("--help").stdout
-        for command in ("add", "list", "done", "delete", "--help"):
+        for command in ("add", "list", "done", "delete", "trash", "restore",
+                        "purge", "cal", "--help"):
             self.assertIn(command, help_text)
         self.assertFalse(self.data.exists())
 
     def test_subcommand_help_and_version(self):
         for args in (("project", "--help"), ("project", "show", "--help"),
-                     ("add", "--help"), ("list", "--help"), ("done", "--help")):
+                     ("add", "--help"), ("list", "--help"), ("done", "--help"),
+                     ("trash", "--help"), ("restore", "--help"),
+                     ("purge", "--help"), ("cal", "--help")):
             text = self.run_todo(*args).stdout
             for token in ("project add", "project show", "--priority", "P0", "P3"):
                 self.assertIn(token, text)
-        self.assertIn("0.2.0", self.run_todo("--version").stdout)
+        self.assertIn("0.2.1", self.run_todo("--version").stdout)
         self.assertFalse(self.data.exists())
 
     def test_projects_and_requested_board(self):
@@ -146,6 +150,84 @@ class TodoCliTest(unittest.TestCase):
         self.assertIn("[ ] | P0 | #6 | TODO | explicit project", listing)
         self.assertIn("due: 2026-10-01", self.run_todo("project", "show", "TODO").stdout)
 
+    def test_trash_restore_purge_and_clear(self):
+        self.run_todo("add", "回收测试", "-p", "P0", "-d", "2026-10-01")
+        self.run_todo("add", "已完成任务")
+        self.run_todo("done", "2")
+        deleted = self.run_todo("delete", "1").stdout
+        self.assertIn("回收站", deleted)
+        self.assertNotIn("回收测试", self.run_todo("list", "--all").stdout)
+        trash = self.run_todo("trash").stdout
+        self.assertIn("回收测试", trash)
+        self.assertIn("P0", trash)
+        self.assertIn("2026-10-01", trash)
+        self.assertIn("#1", trash)
+        self.run_todo("restore", "1")
+        listing = self.run_todo("list", "--all").stdout
+        self.assertIn("回收测试", listing)
+        self.assertIn("P0", listing)
+        self.assertIn("回收站为空", self.run_todo("trash").stdout)
+        self.run_todo("delete", "1")
+        self.run_todo("clear")
+        trash = self.run_todo("trash").stdout
+        self.assertIn("已完成任务", trash)
+        self.assertIn("[x]", trash)
+        self.run_todo("purge", "2")
+        self.assertNotIn("回收测试", self.run_todo("trash").stdout)
+        self.run_todo("purge", "--all")
+        self.assertIn("回收站为空", self.run_todo("trash").stdout)
+        self.run_todo("restore", "99", code=1)
+        self.run_todo("purge", "99", code=1)
+        for args in (("trash", "x"), ("restore",), ("purge",),
+                     ("purge", "--all", "1"), ("restore", "abc")):
+            with self.subTest(args=args):
+                self.run_todo(*args, code=2)
+
+    def test_edit_priority_due_and_title(self):
+        self.run_todo("add", "编辑任务")
+        self.assertIn("[ ] | P2 | #1 | TODO | 编辑任务",
+                      self.run_todo("list").stdout)
+        self.run_todo("edit", "1", "-p", "P0")
+        self.assertIn("[ ] | P0 | #1 | TODO | 编辑任务",
+                      self.run_todo("list").stdout)
+        self.run_todo("edit", "1", "新标题", "-p", "P1", "-d", "2026-10-02")
+        self.assertIn("[ ] | P1 | #1 | TODO | 新标题 | 2026-10-02",
+                      self.run_todo("list").stdout)
+        self.run_todo("edit", "1", "-d", "2026-10-03")
+        self.assertIn("新标题 | 2026-10-03", self.run_todo("list").stdout)
+        self.run_todo("edit", "1", "改回标题")
+        self.assertIn("改回标题", self.run_todo("list").stdout)
+        for args in (("edit",), ("edit", "1"), ("edit", "abc", "x"),
+                     ("edit", "1", "-p", "P9"), ("edit", "1", "-d", "bad"),
+                     ("edit", "1", "-p", "P0", "-p", "P1")):
+            with self.subTest(args=args):
+                self.run_todo(*args, code=2)
+
+    def test_calendar_and_reminders(self):
+        self.run_todo("add", "日历提醒", "-d", "2026-10-05")
+        self.run_todo("add", "另一提醒", "-p", "P0", "-d", "2026-10-20")
+        out = self.run_todo("cal", "2026-10").stdout
+        self.assertIn("2026年10月", out)
+        self.assertIn("提醒事项（2026-10）", out)
+        self.assertIn("日历提醒", out)
+        self.assertIn("2026-10-05", out)
+        self.assertIn("2026-10-20", out)
+        self.assertIn("共 2 条提醒", out)
+        today = datetime.date.today()
+        for day in (5, 20):
+            is_today = today.year == 2026 and today.month == 10 and today.day == day
+            if not is_today:
+                self.assertIn(f"{day}*", out)
+        month11 = self.run_todo("-cal", "2026-11").stdout
+        self.assertIn("2026年11月", month11)
+        self.assertIn("本月没有提醒事项", month11)
+        current = self.run_todo("cal").stdout
+        self.assertIn("提醒事项（", current)
+        for args in (("cal", "2026-13"), ("cal", "2026-1"), ("cal", "bad"),
+                     ("cal", "2026-10", "extra")):
+            with self.subTest(args=args):
+                self.run_todo(*args, code=2)
+
     def test_project_names_and_titles_are_literal(self):
         project = "Python '学习'; DROP TABLE projects; --"
         title = "代码 '测试'; DROP TABLE todos; -- $HOME `id`"
@@ -208,7 +290,7 @@ class TodoCliTest(unittest.TestCase):
             self.assertIn("[x] 旧完成 (#8)", board)
             self.assertIn("Progress: 1/2", board)
         with closing(sqlite3.connect(self.data / "todo.db")) as db, db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
             rows = db.execute("SELECT id, priority, created_at, completed_at, due, project_id FROM todos ORDER BY id").fetchall()
             self.assertEqual(rows, [(3, 1, 100, None, "2026-10-01", 1), (8, 3, 101, 200, None, 1)])
             self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])

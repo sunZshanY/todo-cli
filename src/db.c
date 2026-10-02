@@ -51,7 +51,7 @@ int todo_db_init(sqlite3 *db)
     version = sqlite3_column_int(stmt, 0);
     sqlite3_finalize(stmt);
     stmt = NULL;
-    if (version > 2) {
+    if (version > 3) {
         fprintf(stderr, "数据库版本 %d 高于本程序支持的版本，请升级 todo-cli\n", version);
         sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
         return -1;
@@ -70,6 +70,24 @@ int todo_db_init(sqlite3 *db)
             "UPDATE todos SET project_id = 1;"
             "CREATE INDEX idx_todos_project ON todos(project_id, done, priority);"
             "PRAGMA user_version = 2;", NULL, NULL, &err) != SQLITE_OK)
+            goto fail;
+    }
+    if (version < 3) {
+        if (sqlite3_exec(db,
+            "CREATE TABLE trash ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " original_id INTEGER NOT NULL,"
+            " title TEXT NOT NULL,"
+            " priority INTEGER NOT NULL DEFAULT 2,"
+            " done INTEGER NOT NULL DEFAULT 0,"
+            " created_at INTEGER NOT NULL,"
+            " completed_at INTEGER,"
+            " due TEXT,"
+            " project_id INTEGER REFERENCES projects(id),"
+            " deleted_at INTEGER NOT NULL"
+            ");"
+            "CREATE INDEX idx_trash_deleted ON trash(deleted_at);"
+            "PRAGMA user_version = 3;", NULL, NULL, &err) != SQLITE_OK)
             goto fail;
     }
     if (sqlite3_exec(db, "COMMIT", NULL, NULL, &err) != SQLITE_OK)

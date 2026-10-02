@@ -20,6 +20,19 @@ typedef struct {
     int done;
 } TodoProject;
 
+typedef struct {
+    long id;
+    long original_id;
+    char *title;
+    int priority;
+    int done;
+    long long created_at;
+    long long completed_at;
+    char *due;
+    char *project;
+    long long deleted_at;
+} TrashItem;
+
 enum {
     TODO_FILTER_PENDING = 0,
     TODO_FILTER_DONE = 1,
@@ -39,10 +52,18 @@ int todo_project_list(sqlite3 *db, TodoProject **out, int *count);
 void todo_free_projects(TodoProject *projects, int count);
 int todo_set_done(sqlite3 *db, long id, int done);
 int todo_update_title(sqlite3 *db, long id, const char *title);
+int todo_edit(sqlite3 *db, long id, const char *title, int priority, const char *due);
 int todo_delete(sqlite3 *db, long id);
 int todo_clear_done(sqlite3 *db, int *removed);
 int todo_stats(sqlite3 *db, int *total, int *done, int *pending);
 int todo_exists(sqlite3 *db, long id);
 void todo_free_list(Todo **list, int count);
+int todo_trash_list(sqlite3 *db, TrashItem ***out, int *count);
+void todo_free_trash(TrashItem **list, int count);
+int todo_trash_exists(sqlite3 *db, long id);
+int todo_trash_restore(sqlite3 *db, long trash_id, long *restored_id);
+int todo_trash_delete(sqlite3 *db, long trash_id);
+int todo_trash_clear(sqlite3 *db, int *removed);
+int todo_calendar(sqlite3 *db, const char *month, Todo ***out, int *count);
 
 #endif

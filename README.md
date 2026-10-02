@@ -1,7 +1,7 @@
-# todo-cli v0.2
+# todo-cli v0.2.1
 
 面向 GNU/Linux（Debian）的终端待办工具。C 主程序使用 SQLite 保存任务，支持中文标题；依赖均可通过 apt 安装，无需 pip 或 npm。
-> 跟todo-cli v0.1相比，增加了许多特性 ......
+> 跟todo-cli v0.2相比，新增了回收站（删除可恢复）、edit 修改优先级/截止日期、`todo cal` 月历提醒 ......
 
 内容问题：<a href="error_project/ERROR_2026_9_27.md">todo问题反馈</a>
 
@@ -11,6 +11,9 @@
 - 任务增删改查、完成状态、P0/P1/P2/P3 优先级、截止日期
 - 项目看板：按优先级分组、Completed 列表、Progress 完成进度
 - list 按项目、优先级、待办/已完成状态组合筛选
+- 回收站：`delete`/`clear` 移入回收站，`trash` 查看内容，`restore` 恢复，`purge` 永久删除
+- `edit` 可修改标题、优先级（P0/P1/P2/P3）与截止日期
+- `todo cal [YYYY-MM]`：月历视图，`*` 标记有提醒的日期，并列出当月提醒事项
 - SQLite 本地存储，零服务依赖
 - 天气查询（wttr.in，支持中文输出）
 - 新闻阅览（RSS/Atom，订阅源可配置）
@@ -22,7 +25,7 @@
 取得与你的 Debian 版本和 CPU 架构匹配的 `.deb` 后，在包所在目录执行（以 amd64 为例）：
 
 ```bash
-sudo apt install ./todo-cli_0.2.0-1_amd64.deb
+sudo apt install ./todo-cli_0.2.1-1_amd64.deb
 todo --version
 todo project add NanoX
 todo project add TODO_CLI
@@ -37,10 +40,21 @@ todo project list
 todo list NanoX --priority P0 --todo
 todo done 1
 todo delete 1
+todo trash
+todo restore 1
+todo purge 1
+todo edit 2 "优化UI" --priority P0
+todo cal
 todo --help
 ```
 
 `add` 返回任务 ID，后续命令使用这个 ID。`list` 默认显示未完成任务；`todo list --all` 查看全部，`todo list --done` 查看已完成任务。删除后的 ID 不会重新分配。
+
+`delete` 与 `clear` 只是把任务移入回收站，可用 `todo trash` 查看内容（含标题、优先级、截止日期、删除时间），用 `todo restore <回收ID>` 恢复到原 ID，或 `todo purge <回收ID>` / `todo purge --all` 永久删除。
+
+`todo edit <ID>` 后可接新标题，也可用 `-p P0|P1|P2|P3` 修改优先级、`-d YYYY-MM-DD` 修改截止日期，三者至少提供一项、可任意组合。
+
+`todo cal` 显示当月月历：`*` 标记有提醒的日期，`[...]` 表示今天；下方按日期列出当月全部提醒事项。`todo cal 2026-11` 可查看其他月份。
 
 ID 在所有项目中唯一。示例中的 `1` 适用于全新数据库；已有数据时请使用实际输出的 ID。项目名包含空格时使用引号，例如 `todo project add "My Project"`。项目名称区分大小写，必须先创建项目再添加任务。
 
@@ -84,11 +98,11 @@ todo list --priority P0 --todo                  # 所有项目的 P0 待办
 
 `--all`、`--done`、`--todo` 互斥；`--pending` 等同于 `--todo`。优先级从 P0（最高）到 P3（最低），默认 P2；数字 `0/1/2/3` 和小写 `p0/p1/p2/p3` 也可使用。
 
-### 从 v0.1 升级
+### 从 v0.1 / v0.2 升级
 
-直接安装新版 `.deb` 即可升级。首次运行数据命令时，旧数据库在事务中自动迁移，旧任务归入默认 `TODO` 项目，保留 ID、标题、完成状态、时间、截止日期和优先级数值（旧 1/2/3 对应 P1/P2/P3）。迁移失败时回滚；遇到高于当前支持版本的数据库时拒绝修改。
+直接安装新版 `.deb` 即可升级。首次运行数据命令时，旧数据库在事务中自动迁移：v0.1 旧任务归入默认 `TODO` 项目并保留 ID、标题、完成状态、时间、截止日期和优先级数值；v0.2 数据库会新增 `trash` 回收站表，现有任务不受影响。迁移失败时回滚；遇到高于当前支持版本的数据库时拒绝修改。
 
-`todo add "复习一元一次方程"` 仍可使用，任务进入 `TODO`。新语法中，两个或更多位置参数的第一个是项目名，因此含空格的单任务标题应加引号；也可显式使用 `todo add --project TODO write weekly report`。以 `-` 开头的标题用 `todo add NanoX -- "--标题"`，或 `todo add -- "--标题"` 添加到默认项目。迁移后的数据库应继续使用 v0.2 或更新版本。
+`todo add "复习一元一次方程"` 仍可使用，任务进入 `TODO`。新语法中，两个或更多位置参数的第一个是项目名，因此含空格的单任务标题应加引号；也可显式使用 `todo add --project TODO write weekly report`。以 `-` 开头的标题用 `todo add NanoX -- "--标题"`，或 `todo add -- "--标题"` 添加到默认项目。迁移后的数据库应继续使用 v0.2.1 或更新版本。
 
 任务保存在 `~/.local/share/todo-cli/todo.db`，关闭终端后仍保留。设置了 `XDG_DATA_HOME` 时使用 `$XDG_DATA_HOME/todo-cli/todo.db`，也可用 `TODO_CLI_DATA_DIR` 指定数据目录。日常运行无需 sudo。
 
@@ -104,7 +118,7 @@ apt 会自动安装运行依赖。当前提供本地 `.deb` 打包方式，尚�
 sudo apt update
 sudo apt install --no-install-recommends build-essential cmake dpkg-dev file libsqlite3-dev python3
 sh scripts/build-deb.sh
-sudo apt install ./build-debian/packages/todo-cli_0.2.0-1_amd64.deb
+sudo apt install ./build-debian/packages/todo-cli_0.2.1-1_amd64.deb
 ```
 
 脚本依次执行编译、核心测试、CLI 测试和 CPack 打包；任一步失败即停止。包位于 `build-debian/packages/`，架构由构建环境自动确定（如 `amd64`、`arm64`）。可传入构建目录：`sh scripts/build-deb.sh /tmp/todo-build`。
@@ -145,6 +159,7 @@ ctest --test-dir build --output-on-failure
 todo add 写周报 -p 1 -d 2026-10-01
 todo add 买牛奶
 todo list
+todo cal
 todo done 1
 todo stats
 todo weather 北京

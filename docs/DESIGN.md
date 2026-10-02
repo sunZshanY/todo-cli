@@ -84,12 +84,28 @@ CREATE TABLE IF NOT EXISTS todos (
 );
 CREATE INDEX IF NOT EXISTS idx_todos_done ON todos(done);
 CREATE INDEX idx_todos_project ON todos(project_id, done, priority);
-PRAGMA user_version = 2;
+
+CREATE TABLE trash (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  original_id  INTEGER NOT NULL,              -- 任务原 ID，恢复时保留
+  title        TEXT    NOT NULL,
+  priority     INTEGER NOT NULL DEFAULT 2,
+  done         INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  completed_at INTEGER,
+  due          TEXT,
+  project_id   INTEGER REFERENCES projects(id),
+  deleted_at   INTEGER NOT NULL               -- 移入回收站时间
+);
+CREATE INDEX idx_trash_deleted ON trash(deleted_at);
+PRAGMA user_version = 3;
 ```
 
 默认项目为 `TODO`（id=1）。项目名区分大小写且唯一，CLI 去除名称两端空白并拒绝空名称；任务 ID 跨项目唯一。任务只能添加到已存在的项目，创建项目与添加任务均采用参数化 SQL。
 
-v0.1 数据库未设置 `user_version`，其值为 0。首次运行 v0.2 时开启外键检查，在 `BEGIN IMMEDIATE` 事务内读取版本、创建项目表、通过 `ALTER TABLE` 加入项目关联，再把旧任务归入 TODO。保留所有任务字段和 `sqlite_sequence`，包括已删除任务占用过的 ID；成功后版本设为 2，失败则整体回滚。版本高于 2 时拒绝修改。为兼容 SQLite 的 ALTER 限制，迁移列可空，但 v0.2 写入路径始终要求有效项目。
+`todo delete` 与 `todo clear` 均为软删除：在事务中把任务原样复制到 `trash` 再移除。`todo trash` 列出回收站内容，`todo restore <回收ID>` 按原 ID 写回（AUTOINCREMENT 不会复用已删除 ID，因此不会冲突），`todo purge` 永久删除。
+
+v0.1 数据库未设置 `user_version`，其值为 0。首次运行 v0.2 时开启外键检查，在 `BEGIN IMMEDIATE` 事务内读取版本、创建项目表、通过 `ALTER TABLE` 加入项目关联，再把旧任务归入 TODO。保留所有任务字段和 `sqlite_sequence`，包括已删除任务占用过的 ID；成功后版本设为 2，失败则整体回滚。v0.2.1 在版本低于 3 时新增 `trash` 表。版本高于 3 时拒绝修改。为兼容 SQLite 的 ALTER 限制，迁移列可空，但写入路径始终要求有效项目。
 
 ## 5. CLI 命令设计
 
@@ -103,9 +119,14 @@ todo list | ls [项目] [--project <项目>] [-p|--priority P0|P1|P2|P3]
              [-a|--all] [-d|--done] [-t|--todo|--pending]
 todo done  <ID...>                                标记完成
 todo undo  <ID...>                                取消完成
-todo delete | del | rm <ID...>                    删除任务
-todo edit  <ID> <新标题...>                       修改标题
-todo clear                                        清除全部已完成任务
+todo delete | del | rm <ID...>                    移入回收站
+todo trash                                         查看回收站内容
+todo restore <回收ID...>                           恢复任务（保留原 ID）
+todo purge <回收ID...> | --all                     永久删除回收站任务
+todo edit  <ID> [新标题...] [-p P0|P1|P2|P3] [-d YYYY-MM-DD]
+                                                   修改标题/优先级/截止日期
+todo cal | -cal [YYYY-MM]                          月历与提醒事项
+todo clear                                        清除全部已完成任务（移入回收站）
 todo stats                                        统计
 todo weather [城市]                               天气查询（缺省按 IP 定位）
 todo news   [订阅源1,订阅源2,...]                  新闻阅览（缺省用配置的订阅源）
@@ -114,7 +135,9 @@ todo --version | --help                           版本 / 帮助（兼容 versi
 
 退出码：`0` 成功，`1` 运行错误，`2` 用法错误。
 
-`list` 默认查询所有项目待办，项目、优先级、状态可以组合筛选。待办按优先级、截止日期（空日期最后）、ID 排序；Completed 按完成时间和 ID 倒序。看板固定显示 P0/P1/P2/P3 与 Completed，任务旁显示 ID，进度为完成数/总数；空项目为 0/0。列表用分隔符呈现，避免中文宽度造成表格对齐问题。所有子命令支持 `--help`；帮助和版本查询不会创建数据库。
+`list` 默认查询所有项目待办，项目、优先级、状态可以组合筛选。待办按优先级、截止日期（空日期最后）、ID 排序；Completed 按完成时间和 ID 倒序。看板固定显示 P0/P1/P2/P3 与 Completed，任务旁显示 ID，进度为完成数/总数；空项目为 0/0。列表用分隔符呈现，避免中文宽度造成表格对齐问题。
+
+`edit` 动态拼接 `UPDATE` 语句，标题、优先级、截止日期三者至少提供一项。`cal` 按月查询 `due` 前缀为 `YYYY-MM` 的任务，月历用 `*` 标记有提醒的日期、`[...]` 标记今天（周一为一周起始），下方按日期列出提醒事项。所有子命令支持 `--help`；帮助和版本查询不会创建数据库。
 
 ## 6. 配置系统
 
@@ -181,6 +204,7 @@ ctest --test-dir build
 
 - v0.1（已完成）：基础增删改查、SQLite 存储、天气/新闻、跨平台构建
 - v0.2（已完成）：自定义项目、P0-P3、项目看板及进度、list 组合筛选、旧库迁移、Debian 包
+- v0.2.1（已完成）：回收站（trash/restore/purge）、edit 修改优先级与截止日期、cal 月历提醒
 - v0.3：标签、搜索、JSON 导入导出
 - v0.4：同步/提醒（可选）
 

@@ -14,6 +14,10 @@ int cmd_delete(sqlite3 *db, const TodoCliArgs *args);
 int cmd_edit(sqlite3 *db, const TodoCliArgs *args);
 int cmd_clear(sqlite3 *db);
 int cmd_stats(sqlite3 *db);
+int cmd_trash(sqlite3 *db, const TodoCliArgs *args);
+int cmd_restore(sqlite3 *db, const TodoCliArgs *args);
+int cmd_purge(sqlite3 *db, const TodoCliArgs *args);
+int cmd_cal(sqlite3 *db, const TodoCliArgs *args);
 int cmd_weather(const TodoConfig *cfg, const TodoCliArgs *args);
 int cmd_news(const TodoConfig *cfg, const TodoCliArgs *args);
 

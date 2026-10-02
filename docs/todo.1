@@ -1,4 +1,4 @@
-.TH TODO 1 "September 2026" "todo-cli 0.2.0" "User Commands"
+.TH TODO 1 "October 2026" "todo-cli 0.2.1" "User Commands"
 .SH NAME
 todo \- terminal todo list manager with weather and news
 .SH SYNOPSIS
@@ -60,13 +60,40 @@ Mark tasks as completed. IDs are unique across all projects.
 Revert tasks to pending.
 .TP
 .BR delete " | " del " | " rm " \fIid...\fR"
-Delete tasks.
+Move tasks to the trash. Trashed tasks keep their full content
+(title, priority, due date, project) and can be restored.
 .TP
-.BI "edit " id " " new\-title...
-Change the title of a task.
+.B trash
+List the contents of the trash, most recently deleted first. The output
+includes the trash ID, the original task ID, title, priority, due date
+and deletion time. Restore and purge use the trash ID.
+.TP
+.BI "restore " id...
+Restore tasks from the trash. Tasks come back with their original IDs,
+project, priority and completion state.
+.TP
+.BR purge " \fIid...\fR | \fB\-\-all\fR"
+Permanently delete tasks from the trash. With
+.B \-\-all
+the trash is emptied.
+.TP
+.BR edit " \fIid\fR [new\-title...] [\-p \fIP0|P1|P2|P3\fR] [\-d \fIYYYY\-MM\-DD\fR]"
+Change the title, priority and/or due date of a task. At least one of
+the title or an option must be given; they can be combined. The long
+forms are
+.B \-\-priority
+and
+.BR \-\-due .
+.TP
+.BR cal " | " \-cal " [YYYY\-MM]"
+Print a month calendar. Days with due tasks are marked with
+.BR * ;
+the current day is bracketed. The due tasks of the month are listed
+below the grid, sorted by date and priority. Without an argument the
+current month is shown.
 .TP
 .B clear
-Delete all completed tasks.
+Move all completed tasks to the trash.
 .TP
 .B stats
 Print task counts: total, completed, and pending.
@@ -92,9 +119,10 @@ Help and version queries do not open the database.
 Version 0.1 databases are migrated automatically in a transaction.
 Existing tasks are assigned to the TODO project; IDs, timestamps,
 completion status and due dates are preserved. Old numeric priorities
-1/2/3 become P1/P2/P3. Failed migrations are rolled back.
+1/2/3 become P1/P2/P3. Version 0.2 databases gain the trash table.
+Failed migrations are rolled back.
 Databases with a newer schema version are rejected without modification.
-Use version 0.2 or later after migration.
+Use version 0.2.1 or later after migration.
 .SH FILES
 .TP
 .I data_dir/todo.db
@@ -195,6 +223,9 @@ todo add "Review linear equations"
 todo list
 todo done 1
 todo delete 1
+todo trash
+todo restore 1
+todo purge 1
 todo \-\-help
 .fi
 .RE
@@ -220,6 +251,14 @@ Query the weather in Beijing and read the configured news feeds:
 .nf
 todo weather Beijing
 todo news
+.fi
+.RE
+.PP
+Show the calendar for October 2026 and change a task's priority:
+.RS
+.nf
+todo cal 2026\-10
+todo edit 2 \-\-priority P0
 .fi
 .RE
 .SH SEE ALSO

@@ -200,17 +200,50 @@ int todo_update_title(sqlite3 *db, long id, const char *title)
     return 0;
 }
 
-int todo_delete(sqlite3 *db, long id)
+int todo_edit(sqlite3 *db, long id, const char *title, int priority, const char *due)
 {
     sqlite3_stmt *stmt = NULL;
-    int rc;
+    char sql[192];
+    int idx = 1, rc;
 
-    rc = sqlite3_prepare_v2(db, "DELETE FROM todos WHERE id = ?1", -1, &stmt, NULL);
+    if (title == NULL && priority < 0 && due == NULL)
+        return -1;
+    snprintf(sql, sizeof(sql), "UPDATE todos SET ");
+    if (title != NULL) {
+        size_t n = strlen(sql);
+        snprintf(sql + n, sizeof(sql) - n, "title = ?%d", idx);
+        idx++;
+    }
+    if (priority >= 0) {
+        size_t n = strlen(sql);
+        snprintf(sql + n, sizeof(sql) - n, "%spriority = ?%d",
+                 idx > 1 ? ", " : "", idx);
+        idx++;
+    }
+    if (due != NULL) {
+        size_t n = strlen(sql);
+        snprintf(sql + n, sizeof(sql) - n, "%sdue = ?%d",
+                 idx > 1 ? ", " : "", idx);
+        idx++;
+    }
+    {
+        size_t n = strlen(sql);
+        snprintf(sql + n, sizeof(sql) - n, " WHERE id = ?%d", idx);
+    }
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         TODO_ERR(0, db);
         return -1;
     }
-    sqlite3_bind_int64(stmt, 1, id);
+    idx = 1;
+    if (title != NULL)
+        sqlite3_bind_text(stmt, idx++, title, -1, SQLITE_TRANSIENT);
+    if (priority >= 0)
+        sqlite3_bind_int(stmt, idx++, priority);
+    if (due != NULL)
+        sqlite3_bind_text(stmt, idx++, due, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, idx, id);
     rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     if (rc != SQLITE_DONE) {
@@ -220,10 +253,192 @@ int todo_delete(sqlite3 *db, long id)
     return 0;
 }
 
-int todo_clear_done(sqlite3 *db, int *removed)
+int todo_trash_list(sqlite3 *db, TrashItem ***out, int *count)
+{
+    sqlite3_stmt *stmt = NULL;
+    const char *sql =
+        "SELECT t.id, t.original_id, t.title, t.priority, t.done, t.created_at,"
+        " t.completed_at, t.due, p.name, t.deleted_at "
+        "FROM trash t LEFT JOIN projects p ON p.id = t.project_id "
+        "ORDER BY t.deleted_at DESC, t.id DESC";
+    TrashItem **list = NULL;
+    int n = 0, cap = 0, rc;
+
+    *out = NULL;
+    *count = 0;
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        TrashItem *t;
+        if (n >= cap) {
+            TrashItem **grown;
+            cap = cap == 0 ? 16 : cap * 2;
+            grown = (TrashItem **)realloc(list, (size_t)cap * sizeof(TrashItem *));
+            if (grown == NULL)
+                goto oom;
+            list = grown;
+        }
+        t = (TrashItem *)calloc(1, sizeof(TrashItem));
+        if (t == NULL)
+            goto oom;
+        list[n++] = t;
+        t->id = (long)sqlite3_column_int64(stmt, 0);
+        t->original_id = (long)sqlite3_column_int64(stmt, 1);
+        t->title = todo_strdup((const char *)sqlite3_column_text(stmt, 2));
+        t->priority = sqlite3_column_int(stmt, 3);
+        t->done = sqlite3_column_int(stmt, 4);
+        t->created_at = sqlite3_column_int64(stmt, 5);
+        t->completed_at = sqlite3_column_int64(stmt, 6);
+        if (sqlite3_column_type(stmt, 7) != SQLITE_NULL)
+            t->due = todo_strdup((const char *)sqlite3_column_text(stmt, 7));
+        if (sqlite3_column_type(stmt, 8) != SQLITE_NULL)
+            t->project = todo_strdup((const char *)sqlite3_column_text(stmt, 8));
+        t->deleted_at = sqlite3_column_int64(stmt, 9);
+        if (t->title == NULL ||
+            (sqlite3_column_type(stmt, 7) != SQLITE_NULL && t->due == NULL) ||
+            (sqlite3_column_type(stmt, 8) != SQLITE_NULL && t->project == NULL))
+            goto oom;
+    }
+    if (rc != SQLITE_DONE) {
+        TODO_ERR(0, db);
+        sqlite3_finalize(stmt);
+        todo_free_trash(list, n);
+        return -1;
+    }
+    sqlite3_finalize(stmt);
+    *out = list;
+    *count = n;
+    return 0;
+
+oom:
+    fprintf(stderr, "内存不足\n");
+    if (stmt != NULL)
+        sqlite3_finalize(stmt);
+    todo_free_trash(list, n);
+    return -1;
+}
+
+void todo_free_trash(TrashItem **list, int count)
+{
+    int i;
+    if (list == NULL)
+        return;
+    for (i = 0; i < count; i++) {
+        if (list[i] != NULL) {
+            free(list[i]->title);
+            free(list[i]->due);
+            free(list[i]->project);
+            free(list[i]);
+        }
+    }
+    free(list);
+}
+
+int todo_trash_exists(sqlite3 *db, long id)
+{
+    sqlite3_stmt *stmt = NULL;
+    int rc, exists = 0;
+
+    rc = sqlite3_prepare_v2(db, "SELECT 1 FROM trash WHERE id = ?1", -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    sqlite3_bind_int64(stmt, 1, id);
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        exists = 1;
+    sqlite3_finalize(stmt);
+    return exists;
+}
+
+int todo_trash_restore(sqlite3 *db, long trash_id, long *restored_id)
+{
+    sqlite3_stmt *stmt = NULL;
+    long original_id = 0;
+    int rc;
+
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL) != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    rc = sqlite3_prepare_v2(db, "SELECT original_id FROM trash WHERE id = ?1",
+                            -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, trash_id);
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW)
+        goto fail;
+    original_id = (long)sqlite3_column_int64(stmt, 0);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    /* Original AUTOINCREMENT IDs are never reused, so re-inserting is safe. */
+    rc = sqlite3_prepare_v2(db,
+        "INSERT INTO todos(id, title, priority, done, created_at, completed_at,"
+        " due, project_id)"
+        " SELECT original_id, title, priority, done, created_at, completed_at,"
+        " due, project_id FROM trash WHERE id = ?1",
+        -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, trash_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    if (rc != SQLITE_DONE || sqlite3_changes(db) == 0)
+        goto fail;
+    rc = sqlite3_prepare_v2(db, "DELETE FROM trash WHERE id = ?1", -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, trash_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    if (rc != SQLITE_DONE)
+        goto fail;
+    if (sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) != SQLITE_OK) {
+        TODO_ERR(0, db);
+        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        return -1;
+    }
+    if (restored_id != NULL)
+        *restored_id = original_id;
+    return 0;
+
+fail:
+    TODO_ERR(0, db);
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return -1;
+}
+
+int todo_trash_delete(sqlite3 *db, long trash_id)
+{
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    rc = sqlite3_prepare_v2(db, "DELETE FROM trash WHERE id = ?1", -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    sqlite3_bind_int64(stmt, 1, trash_id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    return 0;
+}
+
+int todo_trash_clear(sqlite3 *db, int *removed)
 {
     char *err = NULL;
-    int rc = sqlite3_exec(db, "DELETE FROM todos WHERE done = 1", NULL, NULL, &err);
+    int rc = sqlite3_exec(db, "DELETE FROM trash", NULL, NULL, &err);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "数据库错误: %s\n", err != NULL ? err : "未知错误");
         sqlite3_free(err);
@@ -232,6 +447,160 @@ int todo_clear_done(sqlite3 *db, int *removed)
     if (removed != NULL)
         *removed = sqlite3_changes(db);
     return 0;
+}
+
+int todo_calendar(sqlite3 *db, const char *month, Todo ***out, int *count)
+{
+    sqlite3_stmt *stmt = NULL;
+    const char *sql =
+        "SELECT t.id, t.title, t.priority, t.done, t.created_at, t.completed_at,"
+        " t.due, p.name "
+        "FROM todos t JOIN projects p ON p.id = t.project_id "
+        "WHERE t.due IS NOT NULL AND substr(t.due, 1, 7) = ?1 "
+        "ORDER BY t.due ASC, t.priority ASC, t.id ASC";
+    Todo **list = NULL;
+    int n = 0, cap = 0, rc;
+
+    *out = NULL;
+    *count = 0;
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, month, -1, SQLITE_TRANSIENT);
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Todo *t;
+        if (n >= cap) {
+            Todo **grown;
+            cap = cap == 0 ? 16 : cap * 2;
+            grown = (Todo **)realloc(list, (size_t)cap * sizeof(Todo *));
+            if (grown == NULL)
+                goto oom;
+            list = grown;
+        }
+        t = (Todo *)calloc(1, sizeof(Todo));
+        if (t == NULL)
+            goto oom;
+        list[n++] = t;
+        t->id = (long)sqlite3_column_int64(stmt, 0);
+        t->title = todo_strdup((const char *)sqlite3_column_text(stmt, 1));
+        t->priority = sqlite3_column_int(stmt, 2);
+        t->done = sqlite3_column_int(stmt, 3);
+        t->created_at = sqlite3_column_int64(stmt, 4);
+        t->completed_at = sqlite3_column_int64(stmt, 5);
+        t->due = todo_strdup((const char *)sqlite3_column_text(stmt, 6));
+        t->project = todo_strdup((const char *)sqlite3_column_text(stmt, 7));
+        if (t->title == NULL || t->due == NULL || t->project == NULL)
+            goto oom;
+    }
+    if (rc != SQLITE_DONE) {
+        TODO_ERR(0, db);
+        sqlite3_finalize(stmt);
+        todo_free_list(list, n);
+        return -1;
+    }
+    sqlite3_finalize(stmt);
+    *out = list;
+    *count = n;
+    return 0;
+
+oom:
+    fprintf(stderr, "内存不足\n");
+    if (stmt != NULL)
+        sqlite3_finalize(stmt);
+    todo_free_list(list, n);
+    return -1;
+}
+
+int todo_delete(sqlite3 *db, long id)
+{
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    /* Soft delete: move the task into the trash table in one transaction. */
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL) != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    rc = sqlite3_prepare_v2(db,
+        "INSERT INTO trash(original_id, title, priority, done, created_at,"
+        " completed_at, due, project_id, deleted_at)"
+        " SELECT id, title, priority, done, created_at, completed_at, due,"
+        " project_id, ?1 FROM todos WHERE id = ?2",
+        -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, todo_time_now());
+    sqlite3_bind_int64(stmt, 2, id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    if (rc != SQLITE_DONE)
+        goto fail;
+    rc = sqlite3_prepare_v2(db, "DELETE FROM todos WHERE id = ?1", -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, id);
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    if (rc != SQLITE_DONE)
+        goto fail;
+    if (sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) != SQLITE_OK) {
+        TODO_ERR(0, db);
+        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        return -1;
+    }
+    return 0;
+
+fail:
+    TODO_ERR(0, db);
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return -1;
+}
+
+int todo_clear_done(sqlite3 *db, int *removed)
+{
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    /* Completed tasks are moved to the trash instead of being dropped. */
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL) != SQLITE_OK) {
+        TODO_ERR(0, db);
+        return -1;
+    }
+    rc = sqlite3_prepare_v2(db,
+        "INSERT INTO trash(original_id, title, priority, done, created_at,"
+        " completed_at, due, project_id, deleted_at)"
+        " SELECT id, title, priority, done, created_at, completed_at, due,"
+        " project_id, ?1 FROM todos WHERE done = 1",
+        -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+        goto fail;
+    sqlite3_bind_int64(stmt, 1, todo_time_now());
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+    if (rc != SQLITE_DONE)
+        goto fail;
+    if (removed != NULL)
+        *removed = sqlite3_changes(db);
+    rc = sqlite3_exec(db, "DELETE FROM todos WHERE done = 1; COMMIT",
+                      NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        TODO_ERR(0, db);
+        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        return -1;
+    }
+    return 0;
+
+fail:
+    TODO_ERR(0, db);
+    sqlite3_finalize(stmt);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return -1;
 }
 
 int todo_stats(sqlite3 *db, int *total, int *done, int *pending)

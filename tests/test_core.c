@@ -174,6 +174,85 @@ static void test_mkdirs(void)
     CHECK(todo_mkdirs(path) == 0);
 }
 
+static void test_trash_edit_and_calendar(void)
+{
+    sqlite3 *db = NULL;
+    Todo **list = NULL;
+    TrashItem **trash = NULL;
+    int count = 0, tcount = 0, removed = 0, i;
+    long id1 = 0, id2 = 0, restored = 0;
+
+    CHECK(todo_db_open(":memory:", &db) == 0);
+    CHECK(todo_db_init(db) == 0);
+    CHECK(todo_add(db, "日历任务", 1, "2026-10-05", &id1) == 0);
+    CHECK(todo_add(db, "普通任务", 2, NULL, &id2) == 0);
+
+    /* edit: priority and due */
+    CHECK(todo_edit(db, id2, NULL, 0, "2026-10-08") == 0);
+    CHECK(todo_list(db, TODO_FILTER_ALL, &list, &count) == 0);
+    CHECK_LONG(count, 2);
+    for (i = 0; i < count; i++) {
+        if (list[i]->id == id2) {
+            CHECK_LONG(list[i]->priority, 0);
+            CHECK(strcmp(list[i]->due, "2026-10-08") == 0);
+        }
+    }
+    todo_free_list(list, count);
+    list = NULL;
+
+    /* edit: title only */
+    CHECK(todo_edit(db, id1, "新标题", -1, NULL) == 0);
+    CHECK(todo_list(db, TODO_FILTER_PENDING, &list, &count) == 0);
+    for (i = 0; i < count; i++) {
+        if (list[i]->id == id1)
+            CHECK(strcmp(list[i]->title, "新标题") == 0);
+    }
+    todo_free_list(list, count);
+    list = NULL;
+
+    /* calendar */
+    CHECK(todo_calendar(db, "2026-10", &list, &count) == 0);
+    CHECK_LONG(count, 2);
+    CHECK(strcmp(list[0]->due, "2026-10-05") == 0);
+    todo_free_list(list, count);
+    list = NULL;
+    CHECK(todo_calendar(db, "2026-11", &list, &count) == 0);
+    CHECK_LONG(count, 0);
+
+    /* soft delete keeps full task content in trash */
+    CHECK(todo_delete(db, id1) == 0);
+    CHECK_LONG(todo_exists(db, id1), 0);
+    CHECK(todo_trash_list(db, &trash, &tcount) == 0);
+    CHECK_LONG(tcount, 1);
+    CHECK_LONG(trash[0]->original_id, id1);
+    CHECK(strcmp(trash[0]->title, "新标题") == 0);
+    CHECK_LONG(trash[0]->priority, 1);
+    CHECK(strcmp(trash[0]->due, "2026-10-05") == 0);
+    todo_free_trash(trash, tcount);
+    trash = NULL;
+
+    /* restore keeps the original ID */
+    CHECK(todo_trash_restore(db, 1, &restored) == 0);
+    CHECK_LONG(restored, id1);
+    CHECK(todo_exists(db, id1) == 1);
+
+    /* clear moves completed tasks to trash; purge removes for good */
+    CHECK(todo_set_done(db, id2, 1) == 0);
+    CHECK(todo_clear_done(db, &removed) == 0);
+    CHECK_LONG(removed, 1);
+    CHECK(todo_trash_exists(db, 2) == 1);
+    CHECK(todo_trash_delete(db, 2) == 0);
+    CHECK(todo_trash_exists(db, 2) == 0);
+
+    CHECK(todo_delete(db, id1) == 0);
+    CHECK(todo_trash_clear(db, &removed) == 0);
+    CHECK_LONG(removed, 1);
+    CHECK(todo_trash_list(db, &trash, &tcount) == 0);
+    CHECK_LONG(tcount, 0);
+
+    todo_db_close(db);
+}
+
 int main(void)
 {
     test_str_trim();
@@ -183,6 +262,7 @@ int main(void)
     test_priority();
     test_path_join();
     test_db_crud();
+    test_trash_edit_and_calendar();
     test_mkdirs();
 
     printf("%d 项检查，%d 失败\n", checks, fails);

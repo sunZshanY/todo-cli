@@ -1,5 +1,6 @@
 #include <todo/cli.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,6 +54,14 @@ static TodoCommand match_command(const char *s)
         return CMD_CLEAR;
     if (strcmp(s, "stats") == 0)
         return CMD_STATS;
+    if (strcmp(s, "trash") == 0)
+        return CMD_TRASH;
+    if (strcmp(s, "restore") == 0)
+        return CMD_RESTORE;
+    if (strcmp(s, "purge") == 0)
+        return CMD_PURGE;
+    if (strcmp(s, "cal") == 0 || strcmp(s, "-cal") == 0)
+        return CMD_CAL;
     if (strcmp(s, "weather") == 0 || strcmp(s, "w") == 0)
         return CMD_WEATHER;
     if (strcmp(s, "news") == 0 || strcmp(s, "n") == 0)
@@ -261,10 +270,12 @@ static int parse_list(int argc, char **argv, TodoCliArgs *out)
 
 static int parse_edit(int argc, char **argv, TodoCliArgs *out)
 {
-    long id;
+    long id, v;
+    int i, title_count = 0, priority_set = 0;
+    const char **parts;
 
-    if (argc < 2) {
-        fprintf(stderr, "用法: todo edit <ID> <新标题...>\n");
+    if (argc < 1) {
+        fprintf(stderr, "用法: todo edit <ID> [新标题...] [-p P0|P1|P2|P3] [-d YYYY-MM-DD]\n");
         return -1;
     }
     if (todo_str_to_long(argv[0], &id) != 0 || id <= 0) {
@@ -276,12 +287,107 @@ static int parse_edit(int argc, char **argv, TodoCliArgs *out)
         return -1;
     out->ids[0] = id;
     out->id_count = 1;
-    out->title = join_parts((const char *const *)(argv + 1), argc - 1, " ");
-    if (out->title == NULL || *todo_str_trim(out->title) == '\0') {
-        fprintf(stderr, "缺少新标题\n");
+
+    parts = (const char **)calloc((size_t)(argc > 0 ? argc : 1), sizeof(char *));
+    if (parts == NULL)
+        return -1;
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--priority") == 0) {
+            if (priority_set || i + 1 >= argc || parse_priority(argv[++i], &v) != 0) {
+                fprintf(stderr, "--priority 需要一个 P0/P1/P2/P3 值，且只能指定一次\n");
+                free(parts);
+                return -1;
+            }
+            out->priority = v;
+            priority_set = 1;
+            continue;
+        }
+        if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--due") == 0) {
+            if (out->due != NULL || i + 1 >= argc || !todo_is_valid_date(argv[++i])) {
+                fprintf(stderr, "无效的截止日期，格式应为 YYYY-MM-DD\n");
+                free(parts);
+                return -1;
+            }
+            out->due = todo_strdup(argv[i]);
+            if (out->due == NULL) {
+                free(parts);
+                return -1;
+            }
+            continue;
+        }
+        if (argv[i][0] == '-') {
+            fprintf(stderr, "未知选项: %s\n", argv[i]);
+            free(parts);
+            return -1;
+        }
+        parts[title_count++] = argv[i];
+    }
+    if (title_count > 0) {
+        out->title = join_parts(parts, title_count, " ");
+        free(parts);
+        if (out->title == NULL || *todo_str_trim(out->title) == '\0') {
+            fprintf(stderr, "缺少新标题\n");
+            return -1;
+        }
+    } else {
+        free(parts);
+    }
+    if (out->title == NULL && out->priority < 0 && out->due == NULL) {
+        fprintf(stderr, "缺少新标题或修改选项（-p 优先级 / -d 截止日期）\n");
         return -1;
     }
     return 0;
+}
+
+static int parse_month(const char *s, int *year, int *month)
+{
+    if (s == NULL || strlen(s) != 7 || s[4] != '-')
+        return -1;
+    if (!isdigit((unsigned char)s[0]) || !isdigit((unsigned char)s[1]) ||
+        !isdigit((unsigned char)s[2]) || !isdigit((unsigned char)s[3]) ||
+        !isdigit((unsigned char)s[5]) || !isdigit((unsigned char)s[6]))
+        return -1;
+    *year = (s[0] - '0') * 1000 + (s[1] - '0') * 100 + (s[2] - '0') * 10 + (s[3] - '0');
+    *month = (s[5] - '0') * 10 + (s[6] - '0');
+    if (*year < 1 || *month < 1 || *month > 12)
+        return -1;
+    return 0;
+}
+
+static int parse_cal(int argc, char **argv, TodoCliArgs *out)
+{
+    if (argc == 0)
+        return 0;
+    if (argc == 1 && parse_month(argv[0], &out->cal_year, &out->cal_month) == 0) {
+        out->cal_set = 1;
+        return 0;
+    }
+    fprintf(stderr, "用法: todo cal [YYYY-MM]\n");
+    return -1;
+}
+
+static int parse_trash(int argc, char **argv, TodoCliArgs *out)
+{
+    (void)argv;
+    (void)out;
+    if (argc != 0) {
+        fprintf(stderr, "该命令不接受参数\n");
+        return -1;
+    }
+    return 0;
+}
+
+static int parse_purge(int argc, char **argv, TodoCliArgs *out)
+{
+    if (argc == 1 && strcmp(argv[0], "--all") == 0) {
+        out->purge_all = 1;
+        return 0;
+    }
+    if (argc > 0 && argv[0][0] == '-') {
+        fprintf(stderr, "用法: todo purge <回收ID...> | --all\n");
+        return -1;
+    }
+    return parse_ids(argc, argv, out);
 }
 
 int todo_cli_parse(int argc, char **argv, TodoCliArgs *out)
@@ -321,6 +427,14 @@ int todo_cli_parse(int argc, char **argv, TodoCliArgs *out)
         return parse_ids(argc - 2, argv + 2, out);
     case CMD_EDIT:
         return parse_edit(argc - 2, argv + 2, out);
+    case CMD_TRASH:
+        return parse_trash(argc - 2, argv + 2, out);
+    case CMD_RESTORE:
+        return parse_ids(argc - 2, argv + 2, out);
+    case CMD_PURGE:
+        return parse_purge(argc - 2, argv + 2, out);
+    case CMD_CAL:
+        return parse_cal(argc - 2, argv + 2, out);
     case CMD_WEATHER:
         if (argc > 2) {
             out->city = join_parts((const char *const *)(argv + 2), argc - 2, " ");
@@ -377,9 +491,14 @@ void todo_cli_help(void)
         "        默认显示所有项目的待办，可组合项目、优先级和状态筛选\n"
         "  done <ID...>          标记任务为已完成\n"
         "  undo <ID...>          取消任务完成状态\n"
-        "  delete <ID...>        删除任务（别名 del、rm）\n"
-        "  edit <ID> <新标题...>  修改任务标题\n"
-        "  clear                 清除全部已完成任务\n"
+        "  delete <ID...>        删除任务到回收站（别名 del、rm）\n"
+        "  trash                 查看回收站中的任务内容\n"
+        "  restore <ID...>       从回收站恢复任务（使用 trash 输出中的回收ID）\n"
+        "  purge <回收ID...>      永久删除回收站任务；purge --all 清空回收站\n"
+        "  edit <ID> [新标题...] [-p P0|P1|P2|P3] [-d YYYY-MM-DD]\n"
+        "        修改任务标题、优先级或截止日期（至少提供一项）\n"
+        "  cal | -cal [YYYY-MM]  查看月历与提醒事项，默认当前月份\n"
+        "  clear                 清除全部已完成任务（移入回收站）\n"
         "  stats                 任务统计\n"
         "  weather [城市]        查询天气，缺省城市按 IP 自动定位\n"
         "  news [订阅源...]       阅读新闻，逗号分隔 RSS/Atom 订阅源\n"
@@ -396,6 +515,10 @@ void todo_cli_help(void)
         "  todo list\n"
         "  todo done 1\n"
         "  todo delete 1\n"
+        "  todo trash\n"
+        "  todo restore 1\n"
+        "  todo edit 2 \"新标题\" --priority P0\n"
+        "  todo cal\n"
         "  todo --help\n"
         "  todo weather 北京\n"
         "  todo news\n"

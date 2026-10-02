@@ -107,6 +107,18 @@ static int todo_main(int argc, char **argv)
     case CMD_STATS:
         rc = cmd_stats(db);
         break;
+    case CMD_TRASH:
+        rc = cmd_trash(db, &args);
+        break;
+    case CMD_RESTORE:
+        rc = cmd_restore(db, &args);
+        break;
+    case CMD_PURGE:
+        rc = cmd_purge(db, &args);
+        break;
+    case CMD_CAL:
+        rc = cmd_cal(db, &args);
+        break;
     default:
         rc = 0;
         break;
