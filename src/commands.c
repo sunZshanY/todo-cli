@@ -40,14 +40,27 @@ static void local_time(struct tm *out, long long ts)
 static void format_datetime(char *buf, size_t cap, long long ts)
 {
     struct tm tm_val;
+    int year, month, day, hour, minute;
     local_time(&tm_val, ts);
     if (tm_val.tm_year == 0) {
         snprintf(buf, cap, "%lld", ts);
         return;
     }
-    snprintf(buf, cap, "%04d-%02d-%02d %02d:%02d",
-             tm_val.tm_year + 1900, tm_val.tm_mon + 1, tm_val.tm_mday,
-             tm_val.tm_hour, tm_val.tm_min);
+    year = tm_val.tm_year + 1900;
+    month = tm_val.tm_mon + 1;
+    day = tm_val.tm_mday;
+    hour = tm_val.tm_hour;
+    minute = tm_val.tm_min;
+    if (year < 0)
+        year = 0;
+    if (year > 9999) {
+        year = 9999;
+        month = 12;
+        day = 31;
+        hour = 23;
+        minute = 59;
+    }
+    snprintf(buf, cap, "%04d-%02d-%02d %02d:%02d", year, month, day, hour, minute);
 }
 
 static int days_in_month(int year, int month)
