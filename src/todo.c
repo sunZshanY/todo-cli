@@ -53,7 +53,7 @@ int todo_add_to_project(sqlite3 *db, const char *project, const char *title,
     }
     sqlite3_finalize(stmt);
     if (sqlite3_changes(db) == 0) {
-        fprintf(stderr, "项目不存在: %s，请先使用 todo project add 创建\n", project);
+        fprintf(stderr, "项目不存在: %s，请使用 todo project add 进行创建\n", project);
         return -1;
     }
     if (new_id != NULL)
@@ -137,7 +137,7 @@ int todo_list_filtered(sqlite3 *db, const char *project, int filter, int priorit
     return 0;
 
 oom:
-    fprintf(stderr, "内存不足\n");
+    fprintf(stderr, "内存占用较大,请您重启一下电脑或者重新打开此软件\n");     //哎哟我去这我遍不下去了说是
     if (stmt != NULL)
         sqlite3_finalize(stmt);
     todo_free_list(list, n);
@@ -314,7 +314,7 @@ int todo_trash_list(sqlite3 *db, TrashItem ***out, int *count)
     return 0;
 
 oom:
-    fprintf(stderr, "内存不足\n");
+    fprintf(stderr, "内存占用较大，请您重启一下电脑或者重新打开此软件\n");      //79行和317行我绷不住了
     if (stmt != NULL)
         sqlite3_finalize(stmt);
     todo_free_trash(list, n);
@@ -743,7 +743,7 @@ int todo_project_list(sqlite3 *db, TodoProject **out, int *count)
     *count = n;
     return 0;
 oom:
-    fprintf(stderr, "内存不足\n");
+    fprintf(stderr, "内存占用过大，请注意\n");
 fail:
     sqlite3_finalize(stmt);
     todo_free_projects(list, n);

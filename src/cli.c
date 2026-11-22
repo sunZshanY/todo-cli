@@ -78,7 +78,7 @@ static int parse_priority(const char *s, long *out)
     if (s[0] == 'P' || s[0] == 'p')
         s++;
     if (strlen(s) != 1 || s[0] < '0' || s[0] > '3') {
-        fprintf(stderr, "无效的优先级，应为 P0/P1/P2/P3（也支持数字 0/1/2/3）\n");
+        fprintf(stderr, "无效的优先级，应该为 P0/P1/P2/P3（可支持数字 0/1/2/3）\n");
         return -1;
     }
     *out = s[0] - '0';
@@ -89,7 +89,7 @@ static int set_project(TodoCliArgs *out, const char *name)
 {
     char *copy, *trimmed;
     if (out->project != NULL) {
-        fprintf(stderr, "项目只能指定一次\n");
+        fprintf(stderr, "请注意，项目只能指定一次\n");
         return -1;
     }
     copy = todo_strdup(name);
@@ -97,7 +97,7 @@ static int set_project(TodoCliArgs *out, const char *name)
         return -1;
     trimmed = todo_str_trim(copy);
     if (*trimmed == '\0') {
-        fprintf(stderr, "项目名称不能为空\n");
+        fprintf(stderr, "请注意，项目名称不能为空\n");
         free(copy);
         return -1;
     }
@@ -117,7 +117,7 @@ static int parse_project(int argc, char **argv, TodoCliArgs *out)
         out->project_cmd = strcmp(argv[0], "add") == 0 ? PROJECT_ADD : PROJECT_SHOW;
         return set_project(out, argv[1]);
     }
-    fprintf(stderr, "用法: todo project add <项目> | list | show <项目>\n");
+    fprintf(stderr, "使用用法: todo project add <项目> | list | show <项目>\n");
     return -1;
 }
 
@@ -526,5 +526,7 @@ void todo_cli_help(void)
         "任务 ID 在所有项目中唯一；done/delete 使用输出中的 ID。\n"
         "旧数据库自动升级，任务归入 TODO，ID 与完成状态保持不变。\n"
         "数据库默认位于 ~/.local/share/todo-cli/todo.db（Linux），\n"
-        "可用 TODO_CLI_DATA_DIR 覆盖；支持数字优先级 0/1/2/3。\n");
+        "可用 TODO_CLI_DATA_DIR 覆盖；支持数字优先级 0/1/2/3。\n
+        "
+        "\n\n本项目由Omia Yu 制作，使用协议为GPL-3.0 LICENCE");
 }
