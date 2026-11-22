@@ -526,7 +526,6 @@ void todo_cli_help(void)
         "任务 ID 在所有项目中唯一；done/delete 使用输出中的 ID。\n"
         "旧数据库自动升级，任务归入 TODO，ID 与完成状态保持不变。\n"
         "数据库默认位于 ~/.local/share/todo-cli/todo.db（Linux），\n"
-        "可用 TODO_CLI_DATA_DIR 覆盖；支持数字优先级 0/1/2/3。\n
-        "
-        "\n\n本项目由Omia Yu 制作，使用协议为GPL-3.0 LICENCE");
+        "可用 TODO_CLI_DATA_DIR 覆盖；支持数字优先级 0/1/2/3。\n"
+        "\n本项目由 Omia Yu 制作，使用协议为 GPL-3.0。\n");
 }

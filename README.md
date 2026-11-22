@@ -1,4 +1,4 @@
-# todo-cli v0.2.1
+# todo-cli v0.2.2
 
 面向 GNU/Linux（Debian）的终端待办工具。C 主程序使用 SQLite 保存任务，支持中文标题；依赖均可通过 apt 安装，无需 pip 或 npm。
 > 跟todo-cli v0.2相比，新增了回收站（删除可恢复）、edit 修改优先级/截止日期、`todo cal` 月历提醒 ......
@@ -25,7 +25,7 @@
 取得与你的 Debian 版本和 CPU 架构匹配的 `.deb` 后，在包所在目录执行（以 amd64 为例）：
 
 ```bash
-sudo apt install ./todo-cli_0.2.1-1_amd64.deb
+sudo apt install ./todo-cli_0.2.2-1_amd64.deb
 todo --version
 todo project add NanoX
 todo project add TODO_CLI
@@ -102,7 +102,7 @@ todo list --priority P0 --todo                  # 所有项目的 P0 待办
 
 直接安装新版 `.deb` 即可升级。首次运行数据命令时，旧数据库在事务中自动迁移：v0.1 旧任务归入默认 `TODO` 项目并保留 ID、标题、完成状态、时间、截止日期和优先级数值；v0.2 数据库会新增 `trash` 回收站表，现有任务不受影响。迁移失败时回滚；遇到高于当前支持版本的数据库时拒绝修改。
 
-`todo add "复习一元一次方程"` 仍可使用，任务进入 `TODO`。新语法中，两个或更多位置参数的第一个是项目名，因此含空格的单任务标题应加引号；也可显式使用 `todo add --project TODO write weekly report`。以 `-` 开头的标题用 `todo add NanoX -- "--标题"`，或 `todo add -- "--标题"` 添加到默认项目。迁移后的数据库应继续使用 v0.2.1 或更新版本。
+`todo add "复习一元一次方程"` 仍可使用，任务进入 `TODO`。新语法中，两个或更多位置参数的第一个是项目名，因此含空格的单任务标题应加引号；也可显式使用 `todo add --project TODO write weekly report`。以 `-` 开头的标题用 `todo add NanoX -- "--标题"`，或 `todo add -- "--标题"` 添加到默认项目。迁移后的数据库应继续使用 v0.2.2 或更新版本。
 
 任务保存在 `~/.local/share/todo-cli/todo.db`，关闭终端后仍保留。设置了 `XDG_DATA_HOME` 时使用 `$XDG_DATA_HOME/todo-cli/todo.db`，也可用 `TODO_CLI_DATA_DIR` 指定数据目录。日常运行无需 sudo。
 
@@ -118,7 +118,7 @@ apt 会自动安装运行依赖。当前提供本地 `.deb` 打包方式，尚�
 sudo apt update
 sudo apt install --no-install-recommends build-essential cmake dpkg-dev file libsqlite3-dev python3
 sh scripts/build-deb.sh
-sudo apt install ./build-debian/packages/todo-cli_0.2.1-1_amd64.deb
+sudo apt install ./build-debian/packages/todo-cli_0.2.2-1_amd64.deb
 ```
 
 脚本依次执行编译、核心测试、CLI 测试和 CPack 打包；任一步失败即停止。包位于 `build-debian/packages/`，架构由构建环境自动确定（如 `amd64`、`arm64`）。可传入构建目录：`sh scripts/build-deb.sh /tmp/todo-build`。
@@ -180,3 +180,9 @@ news_feeds = https://news.ycombinator.com/rss,http://feeds.bbci.co.uk/news/world
 ```
 
 示例见 `docs/config.ini.example`。
+
+---
+
+### 更新(2026-11-22)
+
+v0.2.2：更新帮助文案、作者与 GPL-3.0 协议信息，修复构建问题，并提供 Debian `.deb` 安装包。

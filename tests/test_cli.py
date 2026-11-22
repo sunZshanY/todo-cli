@@ -72,7 +72,7 @@ class TodoCliTest(unittest.TestCase):
             text = self.run_todo(*args).stdout
             for token in ("project add", "project show", "--priority", "P0", "P3"):
                 self.assertIn(token, text)
-        self.assertIn("0.2.1", self.run_todo("--version").stdout)
+        self.assertIn("0.2.2", self.run_todo("--version").stdout)
         self.assertFalse(self.data.exists())
 
     def test_projects_and_requested_board(self):

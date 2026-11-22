@@ -40,7 +40,7 @@ fi
 apt_install "$package"
 dpkg-deb --info "$package"
 todo --version
-test "$(dpkg-query -W -f='${Version}' todo-cli)" = '0.2.0-1'
+test "$(dpkg-query -W -f='${Version}' todo-cli)" = '0.2.2-1'
 # Debian slim intentionally excludes man pages during installation.
 package_dir=$(mktemp -d /tmp/todo-package.XXXXXX)
 dpkg-deb --extract "$package" "$package_dir"
